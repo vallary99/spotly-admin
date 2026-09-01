@@ -1,5 +1,25 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
+// Package display names — kept separate from the underlying tier enum
+// values (STARTER/GROWTH/PREMIUM), which stay as-is in the API/DB.
+// Mirrors spotly-web's app/dashboard/page.tsx tierLabel() — renaming
+// the enum itself would mean a migration touching every business's
+// `tier` column plus every Payment/trial row that references it, for a
+// purely cosmetic rename.
+export function tierLabel(tier: string): string {
+  switch (tier) {
+    case "STARTER":
+      return "Free";
+    case "GROWTH":
+      return "Featured";
+    case "PREMIUM":
+      return "Premium";
+    default:
+      return tier;
+  }
+}
+
+
 // Deliberately separate storage key from spotly-web's "spotly_token" —
 // this is a genuinely different access point per the earlier decision,
 // so an admin and a regular session on the same machine/browser don't
@@ -52,6 +72,38 @@ async function request<T>(path: string, options: RequestInit & { auth?: boolean 
   return res.json();
 }
 
+export interface AdminCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminNeighborhood {
+  id: string;
+  name: string;
+  city: string | null;
+  description: string | null;
+  isHidden: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminQuickFilterGroup {
+  id: string;
+  label: string;
+  icon: string | null;
+  sortOrder: number;
+  categories: AdminCategory[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaxCategoriesSetting {
+  maxCategories: number;
+}
+
 export interface TierLimit {
   priceKes: number;
   photos: number;
@@ -60,6 +112,7 @@ export interface TierLimit {
   concurrentExperiences: number | null;
   monthlyExperiencesIncluded: number | null;
   extraFeatures: string[];
+  experienceAddonPriceKes: number;
 }
 
 export interface AnalyticsSummary {
@@ -207,8 +260,14 @@ export const api = {
   businesses: {
     list: (filters: BusinessFilters) =>
       request<{ total: number; results: AdminBusiness[] }>(`/admin/businesses${toQueryString(filters as Record<string, unknown>)}`),
-    suspend: (id: string, reason: string, until?: string) =>
+    suspend: (id: string, reason?: string, until?: string) =>
       request(`/admin/businesses/${id}/suspend`, { method: "PUT", body: JSON.stringify({ reason, until }) }),
+    // "Deactivate" in the UI — same underlying suspend mechanism, just
+    // no reason required (the backend defaults it to "Deactivated by
+    // admin."). Kept as its own named method so call sites read clearly
+    // rather than every deactivate button needing to remember to pass
+    // undefined explicitly.
+    deactivate: (id: string) => request(`/admin/businesses/${id}/suspend`, { method: "PUT", body: JSON.stringify({}) }),
     unsuspend: (id: string) => request(`/admin/businesses/${id}/unsuspend`, { method: "PUT" }),
     setHiddenGem: (id: string, value: boolean) =>
       request(`/admin/businesses/${id}/hidden-gem`, { method: "PUT", body: JSON.stringify({ value }) }),
@@ -253,5 +312,49 @@ export const api = {
       request<{ total: number; successTotalAmount: number; results: Transaction[] }>(
         `/admin/transactions${toQueryString(filters as Record<string, unknown>)}`,
       ),
+  },
+  tierConfigs: {
+    list: () => request<Record<string, TierLimit>>("/admin/tier-configs"),
+    update: (tier: string, dto: Partial<TierLimit>) =>
+      request<TierLimit>(`/admin/tier-configs/${tier}`, { method: "PUT", body: JSON.stringify(dto) }),
+  },
+  config: {
+    categories: {
+      list: () => request<AdminCategory[]>("/admin/categories"),
+      create: (dto: { name: string; description?: string }) =>
+        request<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(dto) }),
+      update: (id: string, dto: { name?: string; description?: string }) =>
+        request<AdminCategory>(`/admin/categories/${id}`, { method: "PUT", body: JSON.stringify(dto) }),
+      remove: (id: string) => request(`/admin/categories/${id}`, { method: "DELETE" }),
+    },
+    neighborhoods: {
+      list: () => request<AdminNeighborhood[]>("/admin/neighborhoods"),
+      create: (dto: { name: string; city?: string; description?: string }) =>
+        request<AdminNeighborhood>("/admin/neighborhoods", { method: "POST", body: JSON.stringify(dto) }),
+      update: (id: string, dto: { name?: string; city?: string; description?: string; isHidden?: boolean }) =>
+        request<AdminNeighborhood>(`/admin/neighborhoods/${id}`, { method: "PUT", body: JSON.stringify(dto) }),
+      remove: (id: string) => request(`/admin/neighborhoods/${id}`, { method: "DELETE" }),
+    },
+    quickFilterGroups: {
+      list: () => request<AdminQuickFilterGroup[]>("/admin/quick-filter-groups"),
+      create: (dto: { label: string; icon?: string; sortOrder?: number; categoryIds?: string[] }) =>
+        request<AdminQuickFilterGroup>("/admin/quick-filter-groups", { method: "POST", body: JSON.stringify(dto) }),
+      update: (id: string, dto: { label?: string; icon?: string; sortOrder?: number; categoryIds?: string[] }) =>
+        request<AdminQuickFilterGroup>(`/admin/quick-filter-groups/${id}`, { method: "PUT", body: JSON.stringify(dto) }),
+      remove: (id: string) => request(`/admin/quick-filter-groups/${id}`, { method: "DELETE" }),
+      mapCategories: (id: string, categoryIds: string[]) =>
+        request<AdminQuickFilterGroup>(`/admin/quick-filter-groups/${id}/categories`, {
+          method: "PUT",
+          body: JSON.stringify({ categoryIds }),
+        }),
+    },
+    settings: {
+      getMaxCategories: () => request<MaxCategoriesSetting>("/admin/settings/max-categories"),
+      setMaxCategories: (maxCategories: number) =>
+        request<MaxCategoriesSetting>("/admin/settings/max-categories", {
+          method: "PUT",
+          body: JSON.stringify({ maxCategories }),
+        }),
+    },
   },
 };

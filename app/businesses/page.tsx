@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/AdminShell";
-import { api, type AdminBusiness, type BusinessFilters } from "@/lib/api";
+import { api, tierLabel, type AdminBusiness, type BusinessFilters } from "@/lib/api";
 
 // Only "Nairobi" launches for now — matches spotly-web's own CITIES
 // constant (kept as a small local copy since these are separate
@@ -55,7 +55,7 @@ export default function BusinessesPage() {
             onClick={() => setTrialOpen(true)}
             className="rounded-full bg-terracotta px-4 py-2.5 text-sm font-semibold text-white"
           >
-            <i className="bi bi-stars mr-1.5" /> Grant free trial (Starter only)
+            <i className="bi bi-stars mr-1.5" /> Grant free trial (Free package only)
           </button>
           <button
             onClick={() => setDiscountOpen(true)}
@@ -88,18 +88,18 @@ export default function BusinessesPage() {
           value={filters.tier ?? ""}
           options={[
             { value: "", label: "Any" },
-            { value: "STARTER", label: "Starter" },
-            { value: "GROWTH", label: "Growth" },
+            { value: "STARTER", label: "Free" },
+            { value: "GROWTH", label: "Featured" },
             { value: "PREMIUM", label: "Premium" },
           ]}
           onChange={(v) => setFilter({ tier: v || undefined })}
         />
         <LabeledSelect
-          label="Suspended"
+          label="Status"
           value={filters.isSuspended === undefined ? "" : String(filters.isSuspended)}
           options={[
             { value: "", label: "Any" },
-            { value: "true", label: "Suspended" },
+            { value: "true", label: "Deactivated" },
             { value: "false", label: "Active" },
           ]}
           onChange={(v) => setFilter({ isSuspended: v === "" ? undefined : v === "true" })}
@@ -183,7 +183,7 @@ export default function BusinessesPage() {
                 </td>
                 <td className="px-4 py-3">{b.city}</td>
                 <td className="px-4 py-3">
-                  <span className="rounded-full bg-cream px-2.5 py-1 text-xs font-semibold">{b.tier}</span>
+                  <span className="rounded-full bg-cream px-2.5 py-1 text-xs font-semibold">{tierLabel(b.tier)}</span>
                   {b.discountPercent > 0 && <span className="ml-1 text-xs text-olive">-{b.discountPercent}%</span>}
                   {b.isTrialing && <span className="ml-1 text-xs text-terracotta">trial</span>}
                   {!b.isTrialing && b.trialOfferTier && <span className="ml-1 text-xs text-warm-clay">offer pending</span>}
@@ -192,7 +192,7 @@ export default function BusinessesPage() {
                 <td className="px-4 py-3">{b.savesCount}</td>
                 <td className="px-4 py-3">
                   {b.isSuspended ? (
-                    <span className="text-xs font-semibold text-error"><i className="bi bi-slash-circle mr-1" />Suspended</span>
+                    <span className="text-xs font-semibold text-error"><i className="bi bi-slash-circle mr-1" />Deactivated</span>
                   ) : (
                     <span className="text-xs font-semibold text-success"><i className="bi bi-check-circle mr-1" />Active</span>
                   )}
@@ -206,14 +206,14 @@ export default function BusinessesPage() {
                         onClick={() => api.businesses.unsuspend(b.id).then(load).catch(() => {})}
                         className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold hover:bg-cream"
                       >
-                        Unsuspend
+                        Reactivate
                       </button>
                     ) : (
                       <button
                         onClick={() => setSuspendTarget(b)}
                         className="rounded-full border border-error px-2.5 py-1 text-xs font-semibold text-error hover:bg-[rgba(214,90,74,0.08)]"
                       >
-                        Suspend
+                        Deactivate
                       </button>
                     )}
                     <button
@@ -296,10 +296,13 @@ function SuspendModal({ business, onClose, onDone }: { business: AdminBusiness; 
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (!reason.trim()) return;
     setBusy(true);
     try {
-      await api.businesses.suspend(business.id, reason, until || undefined);
+      // Reason is optional (see AdminBusinessService.suspend's default)
+      // — leave it blank for a routine, no-explanation-needed pause;
+      // fill it in when there's an actual policy-violation reason the
+      // owner should see.
+      await api.businesses.suspend(business.id, reason.trim() || undefined, until || undefined);
       onDone();
     } catch {
       // same reasoning as elsewhere in this app — a 401 already gets
@@ -313,10 +316,10 @@ function SuspendModal({ business, onClose, onDone }: { business: AdminBusiness; 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(67,53,47,0.4)] p-5" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-sm rounded-spotly border border-border bg-surface p-6">
-        <h3 className="mb-1 text-lg text-warm-brown">Suspend {business.name}</h3>
+        <h3 className="mb-1 text-lg text-warm-brown">Deactivate {business.name}</h3>
         <p className="mb-4 text-xs text-warm-clay">Hides this business from public browse/search immediately. The owner can still see and edit their own profile.</p>
         <label className="mb-3 block">
-          <span className="mb-1 block text-xs font-semibold text-warm-clay">Reason (required)</span>
+          <span className="mb-1 block text-xs font-semibold text-warm-clay">Reason (optional — shown to the owner if given)</span>
           <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta" />
         </label>
         <label className="mb-4 block">
@@ -325,8 +328,8 @@ function SuspendModal({ business, onClose, onDone }: { business: AdminBusiness; 
         </label>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 rounded-full border border-border py-2 text-sm font-semibold">Cancel</button>
-          <button onClick={submit} disabled={busy || !reason.trim()} className="flex-1 rounded-full bg-error py-2 text-sm font-semibold text-white disabled:opacity-60">
-            {busy ? "Suspending…" : "Suspend"}
+          <button onClick={submit} disabled={busy} className="flex-1 rounded-full bg-error py-2 text-sm font-semibold text-white disabled:opacity-60">
+            {busy ? "Deactivating…" : "Deactivate"}
           </button>
         </div>
       </div>
@@ -356,7 +359,7 @@ function DiscountModal({ filters, onClose, onDone }: { filters: BusinessFilters;
       <div className="w-full max-w-sm rounded-spotly border border-border bg-surface p-6">
         <h3 className="mb-1 text-lg text-warm-brown">Reward program — discount</h3>
         <p className="mb-4 text-xs text-warm-clay">
-          Applies a discount to every business matching your current filters. Starter-tier businesses are automatically
+          Applies a discount to every business matching your current filters. Free-package businesses are automatically
           excluded — a % off a free plan doesn&apos;t mean anything, use &quot;Grant free trial&quot; for those instead.
         </p>
         {result ? (
@@ -366,7 +369,7 @@ function DiscountModal({ filters, onClose, onDone }: { filters: BusinessFilters;
               {result.affected > 0 ? `Applied ${percent}% off to ${result.affected} businesses.` : result.message}
             </p>
             {!!result.excludedStarterCount && (
-              <p className="mb-4 text-xs text-warm-clay">{result.excludedStarterCount} Starter-tier businesses were skipped.</p>
+              <p className="mb-4 text-xs text-warm-clay">{result.excludedStarterCount} Free-package businesses were skipped.</p>
             )}
             <button onClick={onDone} className="w-full rounded-full bg-terracotta py-2 text-sm font-semibold text-white">Done</button>
           </>
@@ -412,7 +415,7 @@ function TrialModal({ filters, onClose, onDone }: { filters: BusinessFilters; on
       <div className="w-full max-w-sm rounded-spotly border border-border bg-surface p-6">
         <h3 className="mb-1 text-lg text-warm-brown">Reward program — free trial</h3>
         <p className="mb-4 text-xs text-warm-clay">
-          Grants trial eligibility to Starter-tier businesses matching your current filters (any non-Starter businesses
+          Grants trial eligibility to Free-package businesses matching your current filters (any non-Free businesses
           in the results are skipped). The owner still has to click &quot;Start Trial&quot; themselves — this doesn&apos;t
           upgrade them immediately.
         </p>
@@ -421,7 +424,7 @@ function TrialModal({ filters, onClose, onDone }: { filters: BusinessFilters; on
             <p className="mb-4 rounded-xl bg-[rgba(199,101,58,0.08)] p-3 text-sm text-terracotta">
               <i className="bi bi-check-circle mr-1.5" />
               {result.affected > 0
-                ? `Offered a ${days}-day ${tier === "GROWTH" ? "Growth" : "Premium"} trial to ${result.affected} businesses.`
+                ? `Offered a ${days}-day ${tierLabel(tier)} trial to ${result.affected} businesses.`
                 : result.message}
             </p>
             <button onClick={onDone} className="w-full rounded-full bg-terracotta py-2 text-sm font-semibold text-white">Done</button>
@@ -431,7 +434,7 @@ function TrialModal({ filters, onClose, onDone }: { filters: BusinessFilters; on
             <label className="mb-4 block">
               <span className="mb-1 block text-xs font-semibold text-warm-clay">Trial tier</span>
               <select value={tier} onChange={(e) => setTier(e.target.value as "GROWTH" | "PREMIUM")} className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta">
-                <option value="GROWTH">Growth</option>
+                <option value="GROWTH">Featured</option>
                 <option value="PREMIUM">Premium</option>
               </select>
             </label>

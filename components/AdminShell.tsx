@@ -12,6 +12,17 @@ const NAV = [
   { href: "/transactions", label: "Transactions", icon: "bi-credit-card" },
   { href: "/moderation", label: "Moderation Queue", icon: "bi-flag" },
   { href: "/emails", label: "Email Templates", icon: "bi-envelope" },
+  {
+    href: "/configuration",
+    label: "Configuration",
+    icon: "bi-sliders",
+    children: [
+      { href: "/configuration", label: "Pricing & Tiers" },
+      { href: "/configuration/categories", label: "Categories" },
+      { href: "/configuration/neighborhoods", label: "Neighborhoods" },
+      { href: "/configuration/quick-filters", label: "Quick Filters" },
+    ],
+  },
 ];
 
 // Every protected page wraps its content in this — checks auth+role and
@@ -60,16 +71,40 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           {NAV.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  active ? "bg-[rgba(199,101,58,0.1)] text-terracotta" : "text-text hover:bg-cream"
-                }`}
-              >
-                <i className={`bi ${item.icon}`} />
-                {item.label}
-              </Link>
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                    active ? "bg-[rgba(199,101,58,0.1)] text-terracotta" : "text-text hover:bg-cream"
+                  }`}
+                >
+                  <i className={`bi ${item.icon}`} />
+                  {item.label}
+                </Link>
+                {/* Sub-items are always visible when their parent is
+                    active, not collapsed behind a click — Configuration
+                    has few enough sections (4) that a permanent list
+                    beats a toggle, and it means a direct link works the
+                    same as clicking through from the sidebar. */}
+                {"children" in item && item.children && active && (
+                  <div className="ml-3.5 mt-1 space-y-0.5 border-l border-border pl-3">
+                    {item.children.map((sub) => {
+                      const subActive = pathname === sub.href;
+                      return (
+                        <Link
+                          key={sub.href}
+                          href={sub.href}
+                          className={`block rounded-lg px-3 py-2 text-[0.83rem] font-medium transition ${
+                            subActive ? "bg-[rgba(199,101,58,0.1)] text-terracotta" : "text-warm-clay hover:bg-cream hover:text-text"
+                          }`}
+                        >
+                          {sub.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

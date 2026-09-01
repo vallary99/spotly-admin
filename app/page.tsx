@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/AdminShell";
-import { api, type AnalyticsSummary, type UsagePoint } from "@/lib/api";
+import { api, tierLabel, type AnalyticsSummary, type UsagePoint } from "@/lib/api";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 export default function DashboardPage() {
@@ -60,7 +60,7 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 {Object.entries(summary.tierBreakdown).map(([tier, count]) => (
                   <div key={tier} className="flex items-center justify-between text-sm">
-                    <span>{tier}</span>
+                    <span>{tierLabel(tier)}</span>
                     <span className="font-semibold text-warm-brown">{count}</span>
                   </div>
                 ))}
