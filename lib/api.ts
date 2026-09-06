@@ -195,7 +195,7 @@ export interface EmailSendLog {
   filters: Record<string, unknown>;
   recipientCount: number;
   businessIds: string[];
-  sentByAdminId: string;
+  sentByAdminId: string | null;
   createdAt: string;
 }
 

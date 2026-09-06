@@ -96,12 +96,13 @@ export default function EmailsPage() {
               <th className="px-4 py-3">Template</th>
               <th className="px-4 py-3">Subject (rendered)</th>
               <th className="px-4 py-3">Business</th>
+              <th className="px-4 py-3">Sent By</th>
               <th className="px-4 py-3">Sent</th>
             </tr>
           </thead>
           <tbody>
             {history.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-warm-clay">No sends yet.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-warm-clay">No sends yet.</td></tr>
             )}
             {history.map((h) => (
               <tr key={h.id} className="border-b border-border last:border-0">
@@ -112,6 +113,10 @@ export default function EmailsPage() {
                     their original aggregate count instead, rather than
                     a blank cell. */}
                 <td className="px-4 py-3">{h.businessName ?? `${h.recipientCount} recipients`}</td>
+                {/* null = an automatic system send (signup, first-photo
+                    approval) rather than an admin clicking "Send" —
+                    see EmailService.logAutomaticSend. */}
+                <td className="px-4 py-3">{h.sentByAdminId ? "Admin" : "System"}</td>
                 <td className="px-4 py-3 text-xs text-warm-clay">{new Date(h.createdAt).toLocaleString()}</td>
               </tr>
             ))}
