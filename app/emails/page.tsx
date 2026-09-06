@@ -95,7 +95,7 @@ export default function EmailsPage() {
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-warm-clay">
               <th className="px-4 py-3">Template</th>
               <th className="px-4 py-3">Subject (rendered)</th>
-              <th className="px-4 py-3">Recipients</th>
+              <th className="px-4 py-3">Business</th>
               <th className="px-4 py-3">Sent</th>
             </tr>
           </thead>
@@ -107,7 +107,11 @@ export default function EmailsPage() {
               <tr key={h.id} className="border-b border-border last:border-0">
                 <td className="px-4 py-3">{h.templateName}</td>
                 <td className="px-4 py-3 text-warm-clay">{h.subject}</td>
-                <td className="px-4 py-3">{h.recipientCount}</td>
+                {/* businessName is only null on the couple of rows
+                    logged before this column existed — those still show
+                    their original aggregate count instead, rather than
+                    a blank cell. */}
+                <td className="px-4 py-3">{h.businessName ?? `${h.recipientCount} recipients`}</td>
                 <td className="px-4 py-3 text-xs text-warm-clay">{new Date(h.createdAt).toLocaleString()}</td>
               </tr>
             ))}

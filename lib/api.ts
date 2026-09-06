@@ -190,6 +190,8 @@ export interface EmailSendLog {
   templateId: string | null;
   templateName: string;
   subject: string;
+  businessId: string | null;
+  businessName: string | null;
   filters: Record<string, unknown>;
   recipientCount: number;
   businessIds: string[];
@@ -301,7 +303,7 @@ export const api = {
         { method: "POST", body: JSON.stringify({ subject, body, filters }) },
       ),
     send: (dto: { templateId?: string; subject?: string; body?: string; filters: BusinessFilters }) =>
-      request<{ queued: number; totalMatched: number; logId: string }>("/admin/email-templates/send", {
+      request<{ queued: number; totalMatched: number }>("/admin/email-templates/send", {
         method: "POST",
         body: JSON.stringify(dto),
       }),
