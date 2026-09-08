@@ -155,7 +155,7 @@ export default function BusinessesPage() {
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-warm-clay">
               <th className="px-4 py-3">Business</th>
-              <th className="px-4 py-3">City</th>
+              <th className="px-4 py-3">Neighbourhood</th>
               <th className="px-4 py-3">Tier</th>
               <th className="px-4 py-3">Views</th>
               <th className="px-4 py-3">Saves</th>
@@ -181,7 +181,7 @@ export default function BusinessesPage() {
                   <div className="font-medium text-text">{b.name}</div>
                   <div className="text-xs text-warm-clay">{b.category}</div>
                 </td>
-                <td className="px-4 py-3">{b.city}</td>
+                <td className="px-4 py-3">{b.neighborhood ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className="rounded-full bg-cream px-2.5 py-1 text-xs font-semibold">{tierLabel(b.tier)}</span>
                   {b.discountPercent > 0 && <span className="ml-1 text-xs text-olive">-{b.discountPercent}%</span>}

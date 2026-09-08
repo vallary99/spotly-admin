@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/AdminShell";
 import { api, type EmailTemplate, type EmailSendLog, type BusinessFilters } from "@/lib/api";
 
-type View = "list" | "edit" | "send";
+type View = "list" | "edit" | "send" | "outreach";
 
 export default function EmailsPage() {
   const [view, setView] = useState<View>("list");
@@ -39,6 +39,14 @@ export default function EmailsPage() {
     );
   }
 
+  if (view === "outreach") {
+    return (
+      <AdminShell>
+        <OutreachFlow templates={templates} onCancel={() => setView("list")} onSent={() => { setView("list"); load(); }} />
+      </AdminShell>
+    );
+  }
+
   return (
     <AdminShell>
       <div className="mb-5 flex items-center justify-between">
@@ -46,12 +54,20 @@ export default function EmailsPage() {
           <h1 className="text-2xl text-warm-brown">Email Templates</h1>
           <p className="text-sm text-warm-clay">Reusable templates for reward offers and announcements.</p>
         </div>
-        <button
-          onClick={() => { setEditing(null); setView("edit"); }}
-          className="rounded-full bg-terracotta px-4 py-2.5 text-sm font-semibold text-white"
-        >
-          <i className="bi bi-plus-lg mr-1.5" /> New template
-        </button>
+        <div className="flex gap-2.5">
+          <button
+            onClick={() => setView("outreach")}
+            className="rounded-full border border-terracotta px-4 py-2.5 text-sm font-semibold text-terracotta"
+          >
+            <i className="bi bi-send mr-1.5" /> Outreach email
+          </button>
+          <button
+            onClick={() => { setEditing(null); setView("edit"); }}
+            className="rounded-full bg-terracotta px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            <i className="bi bi-plus-lg mr-1.5" /> New template
+          </button>
+        </div>
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -248,6 +264,142 @@ function SendFlow({ template, onCancel, onSent }: { template: EmailTemplate; onC
               className="flex-1 rounded-full bg-olive py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               {busy ? "Sending…" : `Send to ${preview?.matchCount ?? 0} businesses`}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// For people who aren't businesses in the system yet — a prospect who
+// hasn't signed up — so there's no filter to run, just a manually-typed
+// recipient list (Val, Sep 2026). Picking an existing template prefills
+// subject/body (still editable); {{variable}} tokens in that copy have
+// no business to substitute against here and are left blank, same as
+// the backend does.
+function OutreachFlow({
+  templates,
+  onCancel,
+  onSent,
+}: {
+  templates: EmailTemplate[];
+  onCancel: () => void;
+  onSent: () => void;
+}) {
+  const [templateId, setTemplateId] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [emailsText, setEmailsText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ queued: number } | null>(null);
+
+  const applyTemplate = (id: string) => {
+    setTemplateId(id);
+    const t = templates.find((t) => t.id === id);
+    if (t) {
+      setSubject(t.subject);
+      setBody(t.body);
+    }
+  };
+
+  const emails = emailsText
+    .split(/[\n,]/)
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  const send = async () => {
+    if (!subject || !body) {
+      setError("Subject and body are both required.");
+      return;
+    }
+    if (emails.length === 0) {
+      setError("Add at least one recipient email.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.email.sendManual({ subject, body, emails });
+      setResult(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't send that.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl">
+      <h1 className="mb-1 text-2xl text-warm-brown">Outreach email</h1>
+      <p className="mb-5 text-sm text-warm-clay">Send directly to email addresses that aren&apos;t in the system as businesses yet.</p>
+
+      {result ? (
+        <div className="rounded-spotly border border-border bg-surface p-6 text-center">
+          <i className="bi bi-check-circle mb-2 block text-3xl text-success" />
+          <p className="mb-4 text-sm">Sent to {result.queued} recipient{result.queued === 1 ? "" : "s"}.</p>
+          <button onClick={onSent} className="rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-white">Done</button>
+        </div>
+      ) : (
+        <>
+          <label className="mb-4 block">
+            <span className="mb-1 block text-xs font-semibold text-warm-clay">Start from a template (optional)</span>
+            <select
+              value={templateId}
+              onChange={(e) => applyTemplate(e.target.value)}
+              className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
+            >
+              <option value="">Write from scratch</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="mb-4 block">
+            <span className="mb-1 block text-xs font-semibold text-warm-clay">Subject</span>
+            <input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
+            />
+          </label>
+
+          <label className="mb-4 block">
+            <span className="mb-1 block text-xs font-semibold text-warm-clay">Body (HTML)</span>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={8}
+              className="w-full rounded-xl border border-border bg-cream px-3 py-2 font-mono text-xs outline-none focus:border-terracotta"
+            />
+          </label>
+
+          <label className="mb-2 block">
+            <span className="mb-1 block text-xs font-semibold text-warm-clay">Recipient emails</span>
+            <textarea
+              value={emailsText}
+              onChange={(e) => setEmailsText(e.target.value)}
+              rows={4}
+              placeholder="one@example.com, another@example.com&#10;or one per line"
+              className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
+            />
+          </label>
+          <p className="mb-5 text-xs text-warm-clay">
+            {emails.length} recipient{emails.length === 1 ? "" : "s"} detected
+          </p>
+
+          {error && <p className="mb-4 text-sm text-error">{error}</p>}
+
+          <div className="flex gap-2">
+            <button onClick={onCancel} className="flex-1 rounded-full border border-border py-2.5 text-sm font-semibold">Cancel</button>
+            <button
+              onClick={send}
+              disabled={busy || emails.length === 0}
+              className="flex-1 rounded-full bg-olive py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {busy ? "Sending…" : `Send to ${emails.length || 0} recipient${emails.length === 1 ? "" : "s"}`}
             </button>
           </div>
         </>

@@ -307,6 +307,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify(dto),
       }),
+    sendManual: (dto: { templateId?: string; subject?: string; body?: string; emails: string[] }) =>
+      request<{ queued: number }>("/admin/email-templates/send-manual", {
+        method: "POST",
+        body: JSON.stringify(dto),
+      }),
     sendHistory: () => request<EmailSendLog[]>("/admin/email-sends"),
   },
   transactions: {
