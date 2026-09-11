@@ -143,7 +143,7 @@ export interface AdminBusiness {
   city: string;
   neighborhood: string | null;
   tier: string;
-  listingStatus: "PENDING" | "ACTIVE" | "INACTIVE";
+  listingStatus: "PENDING" | "ACTIVE" | "INACTIVE" | "DORMANT";
   subscriptionStatus: string;
   profileViews: number;
   savesCount: number;
@@ -187,7 +187,7 @@ export interface AdminBusinessDetail {
   suspendedUntil: string | null;
   suspensionReason: string | null;
   gracePeriodEndsAt: string | null;
-  listingStatus: "PENDING" | "ACTIVE" | "INACTIVE";
+  listingStatus: "PENDING" | "ACTIVE" | "INACTIVE" | "DORMANT";
   wentLiveAt: string | null;
   profileViews: number;
   savesCount: number;
@@ -220,7 +220,7 @@ export interface BusinessFilters {
   neighborhood?: string;
   category?: string;
   tier?: string;
-  listingStatus?: "PENDING" | "ACTIVE" | "INACTIVE";
+  listingStatus?: "PENDING" | "ACTIVE" | "INACTIVE" | "DORMANT";
   isSuspended?: boolean;
   isHiddenGem?: boolean;
   registeredAfter?: string;

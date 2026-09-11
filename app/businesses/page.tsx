@@ -13,6 +13,7 @@ const LISTING_STATUS_OPTIONS = [
   { value: "", label: "Any" },
   { value: "PENDING", label: "Pending (no photo yet)" },
   { value: "ACTIVE", label: "Active" },
+  { value: "DORMANT", label: "Dormant (underusing gallery)" },
   { value: "INACTIVE", label: "Inactive (30+ days, no photo)" },
 ];
 
@@ -249,6 +250,7 @@ export default function BusinessesPage() {
                 <td className="px-4 py-3">
                   {b.listingStatus === "ACTIVE" && <span className="text-xs font-semibold text-success">Active</span>}
                   {b.listingStatus === "PENDING" && <span className="text-xs font-semibold text-warm-clay">Pending</span>}
+                  {b.listingStatus === "DORMANT" && <span className="text-xs font-semibold text-olive">Dormant</span>}
                   {b.listingStatus === "INACTIVE" && <span className="text-xs font-semibold text-error">Inactive</span>}
                 </td>
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
