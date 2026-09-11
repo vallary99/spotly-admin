@@ -9,11 +9,24 @@ import { api, tierLabel, type AdminBusiness, type BusinessFilters } from "@/lib/
 // projects, not worth sharing a package over one array).
 const CITIES = ["Nairobi"];
 
+const LISTING_STATUS_OPTIONS = [
+  { value: "", label: "Any" },
+  { value: "PENDING", label: "Pending (no photo yet)" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "INACTIVE", label: "Inactive (30+ days, no photo)" },
+];
+
 export default function BusinessesPage() {
-  const [filters, setFilters] = useState<BusinessFilters>({ sortBy: "createdAt", sortOrder: "DESC", limit: 50 });
+  const [filters, setFilters] = useState<BusinessFilters>({ sortBy: "createdAt", sortOrder: "DESC", limit: 50, offset: 0 });
+  // Local, undebounced text the input actually shows — filters.search
+  // only updates (and re-fetches) 400ms after typing stops, so every
+  // keystroke doesn't fire its own request.
+  const [searchText, setSearchText] = useState("");
   const [data, setData] = useState<{ total: number; results: AdminBusiness[] } | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
+  const [neighborhoods, setNeighborhoods] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [suspendTarget, setSuspendTarget] = useState<AdminBusiness | null>(null);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [trialOpen, setTrialOpen] = useState(false);
@@ -31,21 +44,51 @@ export default function BusinessesPage() {
   useEffect(load, [filters]);
   useEffect(() => {
     api.categories.list().then(setCategories).catch(() => {});
+    api.config.neighborhoods.list().then((rows) => setNeighborhoods(rows.map((n) => n.name))).catch(() => {});
   }, []);
 
-  const setFilter = (patch: Partial<BusinessFilters>) => setFilters((f) => ({ ...f, ...patch }));
+  // Debounced search — waits for a pause in typing before it actually
+  // becomes a filter (and re-fetches), same reasoning as any live
+  // search field (Val, Sep 2026: "a search field is also definitely
+  // needed").
+  useEffect(() => {
+    const t = setTimeout(() => setFilter({ search: searchText.trim() || undefined }), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchText]);
 
-  // Only counts genuine filter criteria — sortBy/sortOrder/limit are
-  // always present (they're not "a filter" someone applied, they're the
-  // default view), so Clear Filters shouldn't appear just because the
-  // list is sorted a particular way.
+  // Any real filter change starts back at page 1 — otherwise changing,
+  // say, tier while sitting on page 3 of the old results would silently
+  // show page 3 of a completely different, much shorter result set.
+  // offset changes (actual pagination) are the one case that should NOT
+  // reset itself back to 0, so this takes the patch and decides.
+  const setFilter = (patch: Partial<BusinessFilters>) =>
+    setFilters((f) => ({ ...f, ...patch, offset: "offset" in patch ? patch.offset : 0 }));
+
+  // Only counts genuine filter criteria — sortBy/sortOrder/limit/offset
+  // are always present (they're not "a filter" someone applied, they're
+  // the default view), so Clear Filters shouldn't appear just because
+  // the list is sorted a particular way or sitting on page 2.
   const hasActiveFilters = Boolean(
-    filters.city ||
+    filters.search ||
+      filters.city ||
+      filters.neighborhood ||
       filters.category ||
       filters.tier ||
+      filters.listingStatus ||
       filters.isSuspended !== undefined ||
       filters.isHiddenGem !== undefined ||
+      filters.registeredAfter ||
+      filters.registeredBefore ||
       filters.minProfileViews != null,
+  );
+  // Just the filters living in the side drawer — used to badge the
+  // "More filters" button when one of THOSE specifically is active,
+  // even though the top bar's own filters aren't (so the badge means
+  // something precise: "there's an active filter you can't currently
+  // see").
+  const hasActiveDrawerFilters = Boolean(
+    filters.city || filters.neighborhood || filters.category || filters.isHiddenGem !== undefined || filters.minProfileViews != null,
   );
 
   return (
@@ -71,22 +114,32 @@ export default function BusinessesPage() {
         </div>
       </div>
 
-      {/* Filters — anything with a fixed, known set of values is a
-          dropdown (city, category, tier, suspended, hidden gem, sort);
-          only the open-ended numeric range (min views) stays a plain
-          input. */}
-      <div className="mb-5 grid grid-cols-2 gap-3 rounded-spotly border border-border bg-surface p-4 md:grid-cols-4 lg:grid-cols-6">
+      {/* Top bar — search, listing status, tier and date range are the
+          ones judged most likely to be reached for often (Val, Sep
+          2026); city, neighbourhood, category, hidden gem, min views
+          and sort live in the side drawer instead, opened via "More
+          filters" below. Tier's up here specifically because it
+          directly gates the reward-program actions on this same page
+          (discount needs a paid tier, trial needs Starter) — filtering
+          by it first is a natural way into using those. */}
+      <div className="mb-3 grid grid-cols-1 gap-3 rounded-spotly border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-5">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-warm-clay">Search</span>
+          <div className="relative">
+            <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-warm-clay" />
+            <input
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Business name…"
+              className="w-full rounded-xl border border-border bg-cream py-2 pl-8 pr-3 text-sm outline-none focus:border-terracotta"
+            />
+          </div>
+        </label>
         <LabeledSelect
-          label="City"
-          value={filters.city ?? ""}
-          options={[{ value: "", label: "Any" }, ...CITIES.map((c) => ({ value: c, label: c }))]}
-          onChange={(v) => setFilter({ city: v || undefined })}
-        />
-        <LabeledSelect
-          label="Category"
-          value={filters.category ?? ""}
-          options={[{ value: "", label: "Any" }, ...categories.map((c) => ({ value: c, label: c }))]}
-          onChange={(v) => setFilter({ category: v || undefined })}
+          label="Listing status"
+          value={filters.listingStatus ?? ""}
+          options={LISTING_STATUS_OPTIONS}
+          onChange={(v) => setFilter({ listingStatus: (v || undefined) as BusinessFilters["listingStatus"] })}
         />
         <LabeledSelect
           label="Tier"
@@ -99,55 +152,38 @@ export default function BusinessesPage() {
           ]}
           onChange={(v) => setFilter({ tier: v || undefined })}
         />
-        <LabeledSelect
-          label="Status"
-          value={filters.isSuspended === undefined ? "" : String(filters.isSuspended)}
-          options={[
-            { value: "", label: "Any" },
-            { value: "true", label: "Deactivated" },
-            { value: "false", label: "Active" },
-          ]}
-          onChange={(v) => setFilter({ isSuspended: v === "" ? undefined : v === "true" })}
-        />
-        <LabeledSelect
-          label="Hidden Gem"
-          value={filters.isHiddenGem === undefined ? "" : String(filters.isHiddenGem)}
-          options={[
-            { value: "", label: "Any" },
-            { value: "true", label: "Hidden gem" },
-            { value: "false", label: "Not marked" },
-          ]}
-          onChange={(v) => setFilter({ isHiddenGem: v === "" ? undefined : v === "true" })}
-        />
-        <NumberField label="Min Views" value={filters.minProfileViews} onChange={(v) => setFilter({ minProfileViews: v })} />
-        <div>
-          <span className="mb-1 block text-xs font-semibold text-warm-clay">Sort by</span>
-          <div className="flex gap-1.5">
-            <LabeledSelect
-              label=""
-              value={filters.sortBy ?? "createdAt"}
-              options={[
-                { value: "createdAt", label: "Registration date" },
-                { value: "profileViews", label: "Profile views" },
-                { value: "savesCount", label: "Saves" },
-                { value: "name", label: "Name" },
-              ]}
-              onChange={(v) => setFilter({ sortBy: v as BusinessFilters["sortBy"] })}
-              className="min-w-0 flex-1"
-            />
-            <button
-              onClick={() => setFilter({ sortOrder: filters.sortOrder === "ASC" ? "DESC" : "ASC" })}
-              className="shrink-0 rounded-xl border border-border bg-cream px-3 text-sm"
-              title="Toggle order"
-            >
-              <i className={`bi ${filters.sortOrder === "ASC" ? "bi-sort-up" : "bi-sort-down"}`} />
-            </button>
-          </div>
-        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-warm-clay">Registered from</span>
+          <input
+            type="date"
+            value={filters.registeredAfter ?? ""}
+            onChange={(e) => setFilter({ registeredAfter: e.target.value || undefined })}
+            className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-warm-clay">Registered to</span>
+          <input
+            type="date"
+            value={filters.registeredBefore ?? ""}
+            onChange={(e) => setFilter({ registeredBefore: e.target.value || undefined })}
+            className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
+          />
+        </label>
+      </div>
+
+      <div className="mb-5 flex items-center gap-2.5">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="relative rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold hover:bg-cream"
+        >
+          <i className="bi bi-sliders mr-1.5" /> More filters
+          {hasActiveDrawerFilters && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-terracotta" />}
+        </button>
         {hasActiveFilters && (
           <button
-            onClick={() => setFilters({ sortBy: "createdAt", sortOrder: "DESC", limit: 50 })}
-            className="h-fit self-end rounded-xl bg-warm-brown px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
+            onClick={() => { setSearchText(""); setFilters({ sortBy: "createdAt", sortOrder: "DESC", limit: 50, offset: 0 }); }}
+            className="rounded-full bg-warm-brown px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             Clear filters
           </button>
@@ -165,6 +201,7 @@ export default function BusinessesPage() {
               <th className="px-4 py-3">Views</th>
               <th className="px-4 py-3">Saves</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Listing</th>
               <th className="px-4 py-3">Owner</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
@@ -172,12 +209,12 @@ export default function BusinessesPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-warm-clay">Loading…</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-warm-clay">Loading…</td>
               </tr>
             )}
             {!loading && data?.results.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-warm-clay">No businesses match these filters.</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-warm-clay">No businesses match these filters.</td>
               </tr>
             )}
             {data?.results.map((b) => (
@@ -202,6 +239,11 @@ export default function BusinessesPage() {
                     <span className="text-xs font-semibold text-success"><i className="bi bi-check-circle mr-1" />Active</span>
                   )}
                   {b.isHiddenGem && <span className="ml-1.5 text-xs" title="Hidden Gem">✨</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {b.listingStatus === "ACTIVE" && <span className="text-xs font-semibold text-success">Active</span>}
+                  {b.listingStatus === "PENDING" && <span className="text-xs font-semibold text-warm-clay">Pending</span>}
+                  {b.listingStatus === "INACTIVE" && <span className="text-xs font-semibold text-error">Inactive</span>}
                 </td>
                 <td className="px-4 py-3 text-xs text-warm-clay">{b.ownerEmail}</td>
                 <td className="px-4 py-3">
@@ -262,6 +304,34 @@ export default function BusinessesPage() {
         </table>
       </div>
 
+      {/* Pagination — backend already supported take/skip and returns
+          an honest total count; there was just never a way to actually
+          reach anything past the first page (Val, Sep 2026 — confirmed
+          this was genuinely missing, not partially built). */}
+      {data && data.total > 0 && (
+        <div className="mb-8 flex items-center justify-between text-sm text-warm-clay">
+          <p>
+            Showing {(filters.offset ?? 0) + 1}–{Math.min((filters.offset ?? 0) + (filters.limit ?? 50), data.total)} of {data.total}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilter({ offset: Math.max(0, (filters.offset ?? 0) - (filters.limit ?? 50)) })}
+              disabled={(filters.offset ?? 0) === 0}
+              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-cream disabled:opacity-40"
+            >
+              <i className="bi bi-chevron-left" /> Previous
+            </button>
+            <button
+              onClick={() => setFilter({ offset: (filters.offset ?? 0) + (filters.limit ?? 50) })}
+              disabled={(filters.offset ?? 0) + (filters.limit ?? 50) >= data.total}
+              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-cream disabled:opacity-40"
+            >
+              Next <i className="bi bi-chevron-right" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {suspendTarget && (
         <SuspendModal business={suspendTarget} onClose={() => setSuspendTarget(null)} onDone={() => { setSuspendTarget(null); load(); }} />
       )}
@@ -283,6 +353,15 @@ export default function BusinessesPage() {
           business={singleTrialTarget}
           onClose={() => setSingleTrialTarget(null)}
           onDone={() => { setSingleTrialTarget(null); load(); }}
+        />
+      )}
+      {drawerOpen && (
+        <FilterDrawer
+          filters={filters}
+          categories={categories}
+          neighborhoods={neighborhoods}
+          onChange={setFilter}
+          onClose={() => setDrawerOpen(false)}
         />
       )}
     </AdminShell>
@@ -332,6 +411,109 @@ function LabeledSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+// The less-frequently-touched filters, moved out of the always-visible
+// top bar once the filter count grew past what felt easy to scan (Val,
+// Sep 2026 — search/listing-status/tier/date-range stayed up top as
+// the ones judged most reached-for; this is genuinely everything else).
+// Slides in from the right rather than replacing the page content, so
+// the table stays visible underneath while adjusting these.
+function FilterDrawer({
+  filters,
+  categories,
+  neighborhoods,
+  onChange,
+  onClose,
+}: {
+  filters: BusinessFilters;
+  categories: string[];
+  neighborhoods: string[];
+  onChange: (patch: Partial<BusinessFilters>) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(67,53,47,0.4)]" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="flex h-full w-full max-w-xs flex-col overflow-y-auto bg-surface p-5 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg text-warm-brown">More filters</h3>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-cream" aria-label="Close">
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <LabeledSelect
+            label="City"
+            value={filters.city ?? ""}
+            options={[{ value: "", label: "Any" }, ...CITIES.map((c) => ({ value: c, label: c }))]}
+            onChange={(v) => onChange({ city: v || undefined })}
+          />
+          <LabeledSelect
+            label="Neighbourhood"
+            value={filters.neighborhood ?? ""}
+            options={[{ value: "", label: "Any" }, ...neighborhoods.map((n) => ({ value: n, label: n }))]}
+            onChange={(v) => onChange({ neighborhood: v || undefined })}
+          />
+          <LabeledSelect
+            label="Category"
+            value={filters.category ?? ""}
+            options={[{ value: "", label: "Any" }, ...categories.map((c) => ({ value: c, label: c }))]}
+            onChange={(v) => onChange({ category: v || undefined })}
+          />
+          <LabeledSelect
+            label="Status"
+            value={filters.isSuspended === undefined ? "" : String(filters.isSuspended)}
+            options={[
+              { value: "", label: "Any" },
+              { value: "true", label: "Deactivated" },
+              { value: "false", label: "Active" },
+            ]}
+            onChange={(v) => onChange({ isSuspended: v === "" ? undefined : v === "true" })}
+          />
+          <LabeledSelect
+            label="Hidden Gem"
+            value={filters.isHiddenGem === undefined ? "" : String(filters.isHiddenGem)}
+            options={[
+              { value: "", label: "Any" },
+              { value: "true", label: "Hidden gem" },
+              { value: "false", label: "Not marked" },
+            ]}
+            onChange={(v) => onChange({ isHiddenGem: v === "" ? undefined : v === "true" })}
+          />
+          <NumberField label="Min Views" value={filters.minProfileViews} onChange={(v) => onChange({ minProfileViews: v })} />
+          <div>
+            <span className="mb-1 block text-xs font-semibold text-warm-clay">Sort by</span>
+            <div className="flex gap-1.5">
+              <LabeledSelect
+                label=""
+                value={filters.sortBy ?? "createdAt"}
+                options={[
+                  { value: "createdAt", label: "Registration date" },
+                  { value: "profileViews", label: "Profile views" },
+                  { value: "savesCount", label: "Saves" },
+                  { value: "name", label: "Name" },
+                ]}
+                onChange={(v) => onChange({ sortBy: v as BusinessFilters["sortBy"] })}
+                className="min-w-0 flex-1"
+              />
+              <button
+                onClick={() => onChange({ sortOrder: filters.sortOrder === "ASC" ? "DESC" : "ASC" })}
+                className="shrink-0 rounded-xl border border-border bg-cream px-3 text-sm"
+                title="Toggle order"
+              >
+                <i className={`bi ${filters.sortOrder === "ASC" ? "bi-sort-up" : "bi-sort-down"}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={onClose} className="mt-6 w-full rounded-full bg-terracotta py-2.5 text-sm font-semibold text-white">
+          Done
+        </button>
+      </div>
+    </div>
   );
 }
 

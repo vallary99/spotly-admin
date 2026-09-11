@@ -138,6 +138,7 @@ export interface AdminBusiness {
   city: string;
   neighborhood: string | null;
   tier: string;
+  listingStatus: "PENDING" | "ACTIVE" | "INACTIVE";
   subscriptionStatus: string;
   profileViews: number;
   savesCount: number;
@@ -154,9 +155,12 @@ export interface AdminBusiness {
 }
 
 export interface BusinessFilters {
+  search?: string;
   city?: string;
+  neighborhood?: string;
   category?: string;
   tier?: string;
+  listingStatus?: "PENDING" | "ACTIVE" | "INACTIVE";
   isSuspended?: boolean;
   isHiddenGem?: boolean;
   registeredAfter?: string;
