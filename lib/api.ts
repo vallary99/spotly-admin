@@ -154,6 +154,61 @@ export interface AdminBusiness {
   createdAt: string;
 }
 
+export interface AdminBusinessDetail {
+  id: string;
+  name: string;
+  type: string;
+  categories: string[];
+  budgetMin: number | null;
+  budgetMax: number | null;
+  description: string | null;
+  callPhone: string | null;
+  whatsappPhone: string | null;
+  email: string | null;
+  address: string | null;
+  website: string | null;
+  city: string;
+  neighborhood: string | null;
+  tier: string;
+  subscriptionStatus: string;
+  isGrandfathered: boolean;
+  discountPercent: number;
+  trialOfferTier: string | null;
+  trialOfferDays: number | null;
+  trialEndsAt: string | null;
+  isTrialing: boolean;
+  isHiddenGem: boolean;
+  isSuspended: boolean;
+  suspendedUntil: string | null;
+  suspensionReason: string | null;
+  gracePeriodEndsAt: string | null;
+  listingStatus: "PENDING" | "ACTIVE" | "INACTIVE";
+  wentLiveAt: string | null;
+  profileViews: number;
+  savesCount: number;
+  createdAt: string;
+  updatedAt: string;
+  owner: {
+    id: string;
+    name: string;
+    email: string;
+    lastLoginAt: string | null;
+    reviewsSuspended: boolean;
+  } | null;
+  reviewsSummary: { count: number; average: number };
+}
+
+export interface AdminReview {
+  id: string;
+  rating: number;
+  text: string | null;
+  createdAt: string;
+  reviewerId: string;
+  reviewerName: string;
+  reviewerEmail: string;
+  reviewerSuspended: boolean;
+}
+
 export interface BusinessFilters {
   search?: string;
   city?: string;
@@ -272,6 +327,9 @@ export const api = {
   businesses: {
     list: (filters: BusinessFilters) =>
       request<{ total: number; results: AdminBusiness[] }>(`/admin/businesses${toQueryString(filters as Record<string, unknown>)}`),
+    getDetail: (id: string) => request<AdminBusinessDetail>(`/admin/businesses/${id}`),
+    getReviews: (id: string, limit = 20, offset = 0) =>
+      request<{ total: number; results: AdminReview[] }>(`/admin/businesses/${id}/reviews${toQueryString({ limit, offset })}`),
     suspend: (id: string, reason?: string, until?: string) =>
       request(`/admin/businesses/${id}/suspend`, { method: "PUT", body: JSON.stringify({ reason, until }) }),
     // "Deactivate" in the UI — same underlying suspend mechanism, just
@@ -297,6 +355,13 @@ export const api = {
       request(`/admin/businesses/${id}/discount`, { method: "PUT", body: JSON.stringify({ discountPercent }) }),
     grantTrialOffer: (id: string, tier: "GROWTH" | "PREMIUM", days: number) =>
       request(`/admin/businesses/${id}/trial-offer`, { method: "PUT", body: JSON.stringify({ tier, days }) }),
+  },
+  reviews: {
+    delete: (id: string) => request(`/admin/reviews/${id}`, { method: "DELETE" }),
+  },
+  users: {
+    setReviewSuspension: (id: string, suspended: boolean) =>
+      request(`/admin/users/${id}/review-suspension`, { method: "PUT", body: JSON.stringify({ suspended }) }),
   },
   moderation: {
     list: () => request<ModerationItem[]>("/admin/moderation-queue"),

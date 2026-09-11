@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AdminShell } from "@/components/AdminShell";
-import { api, tierLabel, type AdminBusiness, type BusinessFilters } from "@/lib/api";
+import { api, tierLabel, type AdminBusiness, type AdminBusinessDetail, type AdminReview, type BusinessFilters } from "@/lib/api";
 
 // Only "Nairobi" launches for now — matches spotly-web's own CITIES
 // constant (kept as a small local copy since these are separate
@@ -35,6 +35,11 @@ export default function BusinessesPage() {
   // one specific business directly, not a whole filtered group).
   const [singleDiscountTarget, setSingleDiscountTarget] = useState<AdminBusiness | null>(null);
   const [singleTrialTarget, setSingleTrialTarget] = useState<AdminBusiness | null>(null);
+  // Just the id — the modal fetches full detail itself on open, rather
+  // than relying on the table row's already-trimmed AdminBusiness
+  // shape (Val, Sep 2026: the detail view needs fields the table
+  // doesn't even fetch anymore).
+  const [detailTarget, setDetailTarget] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -197,39 +202,40 @@ export default function BusinessesPage() {
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-warm-clay">
               <th className="px-4 py-3">Business</th>
               <th className="px-4 py-3">Neighbourhood</th>
-              <th className="px-4 py-3">Tier</th>
               <th className="px-4 py-3">Views</th>
               <th className="px-4 py-3">Saves</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Listing</th>
-              <th className="px-4 py-3">Owner</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-warm-clay">Loading…</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-warm-clay">Loading…</td>
               </tr>
             )}
             {!loading && data?.results.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-warm-clay">No businesses match these filters.</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-warm-clay">No businesses match these filters.</td>
               </tr>
             )}
+            {/* Row itself opens the detail modal — everything that used
+                to be crammed into extra columns (tier, owner, and now
+                registration date, went-live date, owner activity, the
+                works) lives there instead (Val, Sep 2026: "to avoid
+                crowding... every detail about a business is shown in a
+                modal that pops up when the row is tapped"). Action
+                buttons stop the click from bubbling up to the row, so
+                clicking "Deactivate" doesn't also pop the modal open
+                underneath it. */}
             {data?.results.map((b) => (
-              <tr key={b.id} className="border-b border-border last:border-0 hover:bg-cream/50">
+              <tr key={b.id} className="cursor-pointer border-b border-border last:border-0 hover:bg-cream/50" onClick={() => setDetailTarget(b.id)}>
                 <td className="px-4 py-3">
                   <div className="font-medium text-text">{b.name}</div>
                   <div className="text-xs text-warm-clay">{b.category}</div>
                 </td>
                 <td className="px-4 py-3">{b.neighborhood ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <span className="rounded-full bg-cream px-2.5 py-1 text-xs font-semibold">{tierLabel(b.tier)}</span>
-                  {b.discountPercent > 0 && <span className="ml-1 text-xs text-olive">-{b.discountPercent}%</span>}
-                  {b.isTrialing && <span className="ml-1 text-xs text-terracotta">trial</span>}
-                  {!b.isTrialing && b.trialOfferTier && <span className="ml-1 text-xs text-warm-clay">offer pending</span>}
-                </td>
                 <td className="px-4 py-3">{b.profileViews}</td>
                 <td className="px-4 py-3">{b.savesCount}</td>
                 <td className="px-4 py-3">
@@ -245,8 +251,7 @@ export default function BusinessesPage() {
                   {b.listingStatus === "PENDING" && <span className="text-xs font-semibold text-warm-clay">Pending</span>}
                   {b.listingStatus === "INACTIVE" && <span className="text-xs font-semibold text-error">Inactive</span>}
                 </td>
-                <td className="px-4 py-3 text-xs text-warm-clay">{b.ownerEmail}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-1.5">
                     {b.isSuspended ? (
                       <button
@@ -362,6 +367,13 @@ export default function BusinessesPage() {
           neighborhoods={neighborhoods}
           onChange={setFilter}
           onClose={() => setDrawerOpen(false)}
+        />
+      )}
+      {detailTarget && (
+        <BusinessDetailModal
+          businessId={detailTarget}
+          onClose={() => setDetailTarget(null)}
+          onChanged={load}
         />
       )}
     </AdminShell>
@@ -512,6 +524,280 @@ function FilterDrawer({
         <button onClick={onClose} className="mt-6 w-full rounded-full bg-terracotta py-2.5 text-sm font-semibold text-white">
           Done
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Formats a full date consistently across the detail modal — matches
+// the short-form pattern already used elsewhere in this app (the
+// dashboard's usage chart), just with a year added since these dates
+// can be far apart in time, not all within the same recent chart.
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-1.5 text-sm">
+      <span className="text-warm-clay">{label}</span>
+      <span className="text-right font-medium text-text">{value}</span>
+    </div>
+  );
+}
+
+// Everything the system knows about one business (Val, Sep 2026) —
+// replaces trying to cram it all into extra table columns. Fetches its
+// own detail on open rather than relying on the table row's already-
+// trimmed AdminBusiness shape, which doesn't carry half of this.
+function BusinessDetailModal({
+  businessId,
+  onClose,
+  onChanged,
+}: {
+  businessId: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [detail, setDetail] = useState<AdminBusinessDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.businesses.getDetail(businessId).then(setDetail).catch(() => {}).finally(() => setLoading(false));
+  };
+  useEffect(load, [businessId]);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(67,53,47,0.4)] p-5" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-spotly border border-border bg-surface p-6">
+          {loading || !detail ? (
+            <p className="py-8 text-center text-warm-clay">Loading…</p>
+          ) : (
+            <>
+              <div className="mb-1 flex items-start justify-between">
+                <h3 className="text-lg text-warm-brown">{detail.name}</h3>
+                <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-cream" aria-label="Close">
+                  <i className="bi bi-x-lg" />
+                </button>
+              </div>
+              <p className="mb-4 text-xs text-warm-clay">{detail.categories.join(", ") || "No categories set"}</p>
+
+              <div className="mb-4 rounded-2xl border border-border p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">About</p>
+                <DetailRow label="Type" value={detail.type === "VENUE" ? "Venue" : "Experience Host"} />
+                <DetailRow label="City / Neighbourhood" value={`${detail.city}${detail.neighborhood ? ` / ${detail.neighborhood}` : ""}`} />
+                <DetailRow label="Address" value={detail.address || "—"} />
+                <DetailRow label="Description" value={detail.description ? <span className="whitespace-pre-wrap text-left">{detail.description}</span> : "—"} />
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-border p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">Contact</p>
+                <DetailRow label="Call" value={detail.callPhone || "—"} />
+                <DetailRow label="WhatsApp" value={detail.whatsappPhone || "—"} />
+                <DetailRow label="Email" value={detail.email || "—"} />
+                <DetailRow label="Website" value={detail.website || "—"} />
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-border p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">Subscription</p>
+                <DetailRow label="Tier" value={tierLabel(detail.tier)} />
+                <DetailRow label="Billing status" value={detail.subscriptionStatus} />
+                {detail.isGrandfathered && <DetailRow label="First-200 cohort" value="Yes" />}
+                {detail.discountPercent > 0 && <DetailRow label="Discount" value={`${detail.discountPercent}%`} />}
+                {detail.isTrialing && <DetailRow label="Trial ends" value={formatDate(detail.trialEndsAt)} />}
+                {!detail.isTrialing && detail.trialOfferTier && (
+                  <DetailRow label="Trial offer pending" value={`${tierLabel(detail.trialOfferTier)}, ${detail.trialOfferDays}d — not yet claimed`} />
+                )}
+                {detail.gracePeriodEndsAt && <DetailRow label="Grace period ends" value={formatDate(detail.gracePeriodEndsAt)} />}
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-border p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">Lifecycle</p>
+                <DetailRow label="Registered" value={formatDate(detail.createdAt)} />
+                <DetailRow label="Went live" value={formatDate(detail.wentLiveAt)} />
+                <DetailRow label="Listing status" value={detail.listingStatus} />
+                <DetailRow label="Hidden Gem" value={detail.isHiddenGem ? "Yes ✨" : "No"} />
+                <DetailRow label="Deactivation status" value={detail.isSuspended ? "Deactivated" : "Active"} />
+                {detail.isSuspended && detail.suspensionReason && <DetailRow label="Reason" value={detail.suspensionReason} />}
+                {detail.isSuspended && <DetailRow label="Until" value={detail.suspendedUntil ? formatDate(detail.suspendedUntil) : "Indefinite"} />}
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-border p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">Usage</p>
+                <DetailRow label="Profile views (30d)" value={detail.profileViews} />
+                <DetailRow label="Saves (30d)" value={detail.savesCount} />
+              </div>
+
+              {detail.owner && (
+                <div className="mb-4 rounded-2xl border border-border p-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">Owner</p>
+                  <DetailRow label="Name" value={detail.owner.name} />
+                  <DetailRow label="Email" value={detail.owner.email} />
+                  <DetailRow label="Last active" value={formatDate(detail.owner.lastLoginAt)} />
+                  {detail.owner.reviewsSuspended && <DetailRow label="Review posting" value="Restricted" />}
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-border p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">Reviews</p>
+                <DetailRow
+                  label="Rating"
+                  value={detail.reviewsSummary.count > 0 ? `${detail.reviewsSummary.average} ★ (${detail.reviewsSummary.count})` : "No reviews yet"}
+                />
+                {detail.reviewsSummary.count > 0 && (
+                  <button
+                    onClick={() => setReviewsOpen(true)}
+                    className="mt-2 w-full rounded-full border border-border py-2 text-sm font-semibold hover:bg-cream"
+                  >
+                    Manage reviews
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+      {reviewsOpen && detail && (
+        <ReviewsModal
+          businessId={detail.id}
+          businessName={detail.name}
+          onClose={() => setReviewsOpen(false)}
+          onChanged={() => { load(); onChanged(); }}
+        />
+      )}
+    </>
+  );
+}
+
+// Opened from "Manage reviews" above — a separate, paginated layer
+// rather than crammed into the same modal, since a popular business
+// could have hundreds of reviews (Val, Sep 2026: "How are you planning
+// to fit all comments in a pop-up... will that lead to a reviews
+// page?" — this, instead: a focused panel reached from the business
+// it belongs to, same Previous/Next pagination as the businesses table
+// itself, not a whole standalone section of the app).
+function ReviewsModal({
+  businessId,
+  businessName,
+  onClose,
+  onChanged,
+}: {
+  businessId: string;
+  businessName: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const LIMIT = 20;
+  const [offset, setOffset] = useState(0);
+  const [data, setData] = useState<{ total: number; results: AdminReview[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    api.businesses.getReviews(businessId, LIMIT, offset).then(setData).catch(() => {}).finally(() => setLoading(false));
+  };
+  useEffect(load, [businessId, offset]);
+
+  const handleDelete = async (id: string) => {
+    setBusyId(id);
+    try {
+      await api.reviews.delete(id);
+      load();
+      onChanged();
+    } catch {
+      // leave the list as-is on failure, same posture as the rest of
+      // this app's action buttons
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleToggleSuspend = async (r: AdminReview) => {
+    setBusyId(r.id);
+    try {
+      await api.users.setReviewSuspension(r.reviewerId, !r.reviewerSuspended);
+      load();
+    } catch {
+      // same posture as above
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(67,53,47,0.5)] p-5" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-spotly border border-border bg-surface p-6">
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h3 className="text-lg text-warm-brown">Reviews — {businessName}</h3>
+            <p className="text-xs text-warm-clay">{data ? `${data.total} total` : "…"}</p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-cream" aria-label="Close">
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-3 overflow-y-auto">
+          {loading && <p className="py-8 text-center text-warm-clay">Loading…</p>}
+          {!loading && data?.results.length === 0 && <p className="py-8 text-center text-warm-clay">No reviews.</p>}
+          {data?.results.map((r) => (
+            <div key={r.id} className="rounded-2xl border border-border p-3">
+              <div className="mb-1 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-text">{r.reviewerName}</p>
+                  <p className="text-xs text-warm-clay">{r.reviewerEmail}</p>
+                </div>
+                <span className="text-sm font-semibold text-terracotta">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+              </div>
+              {r.text && <p className="mb-2 text-sm text-text">{r.text}</p>}
+              <p className="mb-2 text-xs text-warm-clay">{formatDate(r.createdAt)}</p>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => handleDelete(r.id)}
+                  disabled={busyId === r.id}
+                  className="rounded-full border border-error px-3 py-1 text-xs font-semibold text-error hover:bg-[rgba(214,90,74,0.08)] disabled:opacity-50"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => handleToggleSuspend(r)}
+                  disabled={busyId === r.id}
+                  className="rounded-full border border-border px-3 py-1 text-xs font-semibold hover:bg-cream disabled:opacity-50"
+                  title="Restricts this user from posting reviews on ANY business, not just this one"
+                >
+                  {r.reviewerSuspended ? "Unrestrict reviewer" : "Restrict reviewer"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {data && data.total > LIMIT && (
+          <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-sm text-warm-clay">
+            <p>{offset + 1}–{Math.min(offset + LIMIT, data.total)} of {data.total}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
+                disabled={offset === 0}
+                className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-cream disabled:opacity-40"
+              >
+                <i className="bi bi-chevron-left" /> Previous
+              </button>
+              <button
+                onClick={() => setOffset((o) => o + LIMIT)}
+                disabled={offset + LIMIT >= data.total}
+                className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-cream disabled:opacity-40"
+              >
+                Next <i className="bi bi-chevron-right" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
