@@ -104,6 +104,11 @@ export interface MaxCategoriesSetting {
   maxCategories: number;
 }
 
+export interface GoLiveReminderSettings {
+  reminderIntervalDays: number;
+  reminderCount: number;
+}
+
 export interface TierLimit {
   priceKes: number;
   photos: number;
@@ -440,6 +445,12 @@ export const api = {
         request<MaxCategoriesSetting>("/admin/settings/max-categories", {
           method: "PUT",
           body: JSON.stringify({ maxCategories }),
+        }),
+      getGoLiveReminders: () => request<GoLiveReminderSettings>("/admin/settings/go-live-reminders"),
+      setGoLiveReminders: (dto: GoLiveReminderSettings) =>
+        request<GoLiveReminderSettings>("/admin/settings/go-live-reminders", {
+          method: "PUT",
+          body: JSON.stringify(dto),
         }),
     },
   },

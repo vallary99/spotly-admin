@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/AdminShell";
-import { api, tierLabel, type TierLimit } from "@/lib/api";
+import { api, tierLabel, type TierLimit, type GoLiveReminderSettings } from "@/lib/api";
 
 // Fixed display order — STARTER (Free) first, then the two paid tiers
 // in ascending price. The API returns tier-configs as a plain object
@@ -44,7 +44,95 @@ export default function ConfigurationPage() {
           ))}
         </div>
       )}
+
+      <div className="mb-5 mt-10">
+        <h2 className="text-xl text-warm-brown">Go-Live Reminders</h2>
+        <p className="text-sm text-warm-clay">
+          How often a business with no photo gets nudged before its listing goes inactive.
+        </p>
+      </div>
+      <GoLiveReminderCard />
     </AdminShell>
+  );
+}
+
+function GoLiveReminderCard() {
+  const [settings, setSettings] = useState<GoLiveReminderSettings | null>(null);
+  const [form, setForm] = useState({ reminderIntervalDays: 7, reminderCount: 4 });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  const load = () => {
+    api.config.settings.getGoLiveReminders().then((s) => {
+      setSettings(s);
+      setForm(s);
+    }).catch(() => setError("Couldn't load reminder settings."));
+  };
+  useEffect(load, []);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await api.config.settings.setGoLiveReminders(form);
+      setSettings(saved);
+      setForm(saved);
+      setSavedAt(Date.now());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save that.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!settings) return <p className="text-warm-clay">{error || "Loading…"}</p>;
+
+  const inactiveAfterDays = form.reminderIntervalDays * form.reminderCount;
+
+  return (
+    <div className="max-w-md rounded-spotly border border-border bg-surface p-5">
+      <label className="mb-4 block">
+        <span className="mb-1 block text-xs font-semibold text-warm-clay">Days between reminders</span>
+        <input
+          type="number"
+          min={1}
+          max={30}
+          value={form.reminderIntervalDays}
+          onChange={(e) => setForm((f) => ({ ...f, reminderIntervalDays: Number(e.target.value) }))}
+          className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
+        />
+      </label>
+      <label className="mb-2 block">
+        <span className="mb-1 block text-xs font-semibold text-warm-clay">Number of reminders</span>
+        <input
+          type="number"
+          min={1}
+          max={20}
+          value={form.reminderCount}
+          onChange={(e) => setForm((f) => ({ ...f, reminderCount: Number(e.target.value) }))}
+          className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
+        />
+      </label>
+      {/* Not itself an editable field — going inactive right after the
+          last scheduled reminder means there's never a confusing silent
+          gap between "the reminders stopped" and "the listing went
+          inactive with no further warning" (Val, Sep 2026). */}
+      <p className="mb-4 text-xs text-warm-clay">
+        A still-photo-less business goes inactive after <strong>{inactiveAfterDays} days</strong> — right after the last reminder.
+      </p>
+      {error && <p className="mb-3 text-sm text-error">{error}</p>}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={save}
+          disabled={busy}
+          className="rounded-full bg-terracotta px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+        {savedAt && !busy && !error && <span className="text-xs text-success"><i className="bi bi-check-circle mr-1" />Saved</span>}
+      </div>
+    </div>
   );
 }
 
