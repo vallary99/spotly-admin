@@ -39,10 +39,10 @@ export default function EmailsPage() {
     );
   }
 
-  if (view === "outreach") {
+  if (view === "outreach" && sending) {
     return (
       <AdminShell>
-        <OutreachFlow templates={templates} onCancel={() => setView("list")} onSent={() => { setView("list"); load(); }} />
+        <OutreachFlow template={sending} onCancel={() => setView("list")} onSent={() => { setView("list"); load(); }} />
       </AdminShell>
     );
   }
@@ -54,20 +54,12 @@ export default function EmailsPage() {
           <h1 className="text-2xl text-warm-brown">Email Templates</h1>
           <p className="text-sm text-warm-clay">Reusable templates for reward offers and announcements.</p>
         </div>
-        <div className="flex gap-2.5">
-          <button
-            onClick={() => setView("outreach")}
-            className="rounded-full border border-terracotta px-4 py-2.5 text-sm font-semibold text-terracotta"
-          >
-            <i className="bi bi-send mr-1.5" /> Outreach email
-          </button>
-          <button
-            onClick={() => { setEditing(null); setView("edit"); }}
-            className="rounded-full bg-terracotta px-4 py-2.5 text-sm font-semibold text-white"
-          >
-            <i className="bi bi-plus-lg mr-1.5" /> New template
-          </button>
-        </div>
+        <button
+          onClick={() => { setEditing(null); setView("edit"); }}
+          className="rounded-full bg-terracotta px-4 py-2.5 text-sm font-semibold text-white"
+        >
+          <i className="bi bi-plus-lg mr-1.5" /> New template
+        </button>
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -76,20 +68,42 @@ export default function EmailsPage() {
             No templates yet — create one to start sending reward offers or announcements.
           </p>
         )}
-        {templates.map((t) => (
+        {templates.map((t) => {
+          // Every built-in template now fires from a real action — a
+          // signup, a first-photo approval, a discount/trial actually
+          // being granted, a suspension/reactivation happening — except
+          // OUTREACH, which has no triggering action since its
+          // recipients (prospective businesses) aren't in the system
+          // yet at all (Val, Sep 2026: "all emails should be automatic
+          // except the outreach... outreach should also be a template
+          // just with the additional functionality to add recipient
+          // emails"). Custom templates an admin writes from scratch
+          // (no key at all) keep the normal filtered-segment Send flow
+          // — this only affects the built-ins.
+          const isOutreach = t.key === "OUTREACH";
+          const isAutomatic = !!t.key && !isOutreach;
+          return (
           <div key={t.id} className="rounded-spotly border border-border bg-surface p-4">
             <h3 className="mb-1 font-semibold text-warm-brown">{t.name}</h3>
             <p className="mb-3 truncate text-sm text-warm-clay">{t.subject}</p>
+            {isAutomatic && (
+              <p className="mb-3 text-xs text-warm-clay">
+                <i className="bi bi-lightning-charge-fill mr-1 text-terracotta" />
+                Fires automatically — not manually sendable
+              </p>
+            )}
             <div className="flex gap-1.5">
-              <button
-                onClick={() => { setSending(t); setView("send"); }}
-                className="flex-1 rounded-full bg-olive py-1.5 text-xs font-semibold text-white"
-              >
-                Send
-              </button>
+              {!isAutomatic && (
+                <button
+                  onClick={() => { setSending(t); setView(isOutreach ? "outreach" : "send"); }}
+                  className="flex-1 rounded-full bg-olive py-1.5 text-xs font-semibold text-white"
+                >
+                  Send
+                </button>
+              )}
               <button
                 onClick={() => { setEditing(t); setView("edit"); }}
-                className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-cream"
+                className={`rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-cream ${isAutomatic ? "flex-1" : ""}`}
               >
                 Edit
               </button>
@@ -101,7 +115,8 @@ export default function EmailsPage() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <h2 className="mb-3 text-lg text-warm-brown">Send History</h2>
@@ -279,30 +294,26 @@ function SendFlow({ template, onCancel, onSent }: { template: EmailTemplate; onC
 // no business to substitute against here and are left blank, same as
 // the backend does.
 function OutreachFlow({
-  templates,
+  template,
   onCancel,
   onSent,
 }: {
-  templates: EmailTemplate[];
+  template: EmailTemplate;
   onCancel: () => void;
   onSent: () => void;
 }) {
-  const [templateId, setTemplateId] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  // Prefilled from the real, persisted OUTREACH template rather than a
+  // "pick one or write from scratch" dropdown — outreach is now just
+  // another template (Val, Sep 2026), so its own saved content (edited
+  // via the same Edit button every other template has) is always the
+  // starting point here. Still fully editable per-send, since outreach
+  // copy is typically personalized per recipient anyway.
+  const [subject, setSubject] = useState(template.subject);
+  const [body, setBody] = useState(template.body);
   const [emailsText, setEmailsText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ queued: number } | null>(null);
-
-  const applyTemplate = (id: string) => {
-    setTemplateId(id);
-    const t = templates.find((t) => t.id === id);
-    if (t) {
-      setSubject(t.subject);
-      setBody(t.body);
-    }
-  };
 
   const emails = emailsText
     .split(/[\n,]/)
@@ -321,7 +332,9 @@ function OutreachFlow({
     setBusy(true);
     setError(null);
     try {
-      const res = await api.email.sendManual({ subject, body, emails });
+      // templateId ties each send-log row back to this template, the
+      // same way any other template's send does.
+      const res = await api.email.sendManual({ templateId: template.id, subject, body, emails });
       setResult(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send that.");
@@ -332,7 +345,7 @@ function OutreachFlow({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-1 text-2xl text-warm-brown">Outreach email</h1>
+      <h1 className="mb-1 text-2xl text-warm-brown">Send &quot;{template.name}&quot;</h1>
       <p className="mb-5 text-sm text-warm-clay">Send directly to email addresses that aren&apos;t in the system as businesses yet.</p>
 
       {result ? (
@@ -343,20 +356,6 @@ function OutreachFlow({
         </div>
       ) : (
         <>
-          <label className="mb-4 block">
-            <span className="mb-1 block text-xs font-semibold text-warm-clay">Start from a template (optional)</span>
-            <select
-              value={templateId}
-              onChange={(e) => applyTemplate(e.target.value)}
-              className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta"
-            >
-              <option value="">Write from scratch</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </label>
-
           <label className="mb-4 block">
             <span className="mb-1 block text-xs font-semibold text-warm-clay">Subject</span>
             <input

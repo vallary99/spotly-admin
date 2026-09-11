@@ -178,6 +178,12 @@ export interface ModerationItem {
 
 export interface EmailTemplate {
   id: string;
+  // Only the built-in templates have one — null for anything an admin
+  // creates from scratch. Used to identify the templates that now fire
+  // automatically from a real action (the two welcome emails, discount/
+  // trial offers) rather than being manually broadcast — see the
+  // AUTOMATIC_ONLY_KEYS list in app/emails/page.tsx.
+  key: string | null;
   name: string;
   subject: string;
   body: string;
@@ -283,6 +289,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ ...filters, trialTier, days }),
       }),
+    grantDiscount: (id: string, discountPercent: number) =>
+      request(`/admin/businesses/${id}/discount`, { method: "PUT", body: JSON.stringify({ discountPercent }) }),
+    grantTrialOffer: (id: string, tier: "GROWTH" | "PREMIUM", days: number) =>
+      request(`/admin/businesses/${id}/trial-offer`, { method: "PUT", body: JSON.stringify({ tier, days }) }),
   },
   moderation: {
     list: () => request<ModerationItem[]>("/admin/moderation-queue"),

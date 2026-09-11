@@ -17,6 +17,11 @@ export default function BusinessesPage() {
   const [suspendTarget, setSuspendTarget] = useState<AdminBusiness | null>(null);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [trialOpen, setTrialOpen] = useState(false);
+  // Single-business targets — separate from the two above, which are
+  // for the filtered-segment campaign modals (Val, Sep 2026: rewarding
+  // one specific business directly, not a whole filtered group).
+  const [singleDiscountTarget, setSingleDiscountTarget] = useState<AdminBusiness | null>(null);
+  const [singleTrialTarget, setSingleTrialTarget] = useState<AdminBusiness | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -223,6 +228,32 @@ export default function BusinessesPage() {
                     >
                       ✨
                     </button>
+                    {/* Single-business reward actions — separate from
+                        the filtered-segment campaign buttons above the
+                        table, for rewarding one specific business
+                        directly (Val, Sep 2026). Discount only makes
+                        sense on a paid tier; trial offer only on
+                        Starter — same eligibility rules the backend
+                        enforces either way, just reflected here too so
+                        the wrong button isn't even offered. */}
+                    {b.tier !== "STARTER" && (
+                      <button
+                        onClick={() => setSingleDiscountTarget(b)}
+                        className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold hover:bg-cream"
+                        title="Grant a discount to this business"
+                      >
+                        % Off
+                      </button>
+                    )}
+                    {b.tier === "STARTER" && (
+                      <button
+                        onClick={() => setSingleTrialTarget(b)}
+                        className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold hover:bg-cream"
+                        title="Grant a trial offer to this business"
+                      >
+                        Trial
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -239,6 +270,20 @@ export default function BusinessesPage() {
       )}
       {trialOpen && (
         <TrialModal filters={filters} onClose={() => setTrialOpen(false)} onDone={() => { setTrialOpen(false); load(); }} />
+      )}
+      {singleDiscountTarget && (
+        <SingleDiscountModal
+          business={singleDiscountTarget}
+          onClose={() => setSingleDiscountTarget(null)}
+          onDone={() => { setSingleDiscountTarget(null); load(); }}
+        />
+      )}
+      {singleTrialTarget && (
+        <SingleTrialModal
+          business={singleTrialTarget}
+          onClose={() => setSingleTrialTarget(null)}
+          onDone={() => { setSingleTrialTarget(null); load(); }}
+        />
       )}
     </AdminShell>
   );
@@ -450,6 +495,102 @@ function TrialModal({ filters, onClose, onDone }: { filters: BusinessFilters; on
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Single-business equivalent of DiscountModal above — same shape, but
+// targets exactly one business rather than a whole filtered segment
+// (Val, Sep 2026). The email that goes out is automatic on the backend
+// the moment this saves — nothing further to do here once it succeeds.
+function SingleDiscountModal({ business, onClose, onDone }: { business: AdminBusiness; onClose: () => void; onDone: () => void }) {
+  const [percent, setPercent] = useState(10);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.businesses.grantDiscount(business.id, percent);
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't grant that discount.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(67,53,47,0.4)] p-5" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-sm rounded-spotly border border-border bg-surface p-6">
+        <h3 className="mb-1 text-lg text-warm-brown">Grant a discount to {business.name}</h3>
+        <p className="mb-4 text-xs text-warm-clay">
+          Emails the owner immediately with the discount, and applies it to their {tierLabel(business.tier)} plan.
+        </p>
+        <label className="mb-4 block">
+          <span className="mb-1 block text-xs font-semibold text-warm-clay">Discount (%)</span>
+          <input type="number" min={0} max={100} value={percent} onChange={(e) => setPercent(Number(e.target.value))} className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta" />
+        </label>
+        {error && <p className="mb-4 text-sm text-error">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-full border border-border py-2 text-sm font-semibold">Cancel</button>
+          <button onClick={submit} disabled={busy} className="flex-1 rounded-full bg-terracotta py-2 text-sm font-semibold text-white disabled:opacity-60">
+            {busy ? "Granting…" : "Grant discount"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Single-business equivalent of TrialModal above.
+function SingleTrialModal({ business, onClose, onDone }: { business: AdminBusiness; onClose: () => void; onDone: () => void }) {
+  const [tier, setTier] = useState<"GROWTH" | "PREMIUM">("GROWTH");
+  const [days, setDays] = useState(14);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.businesses.grantTrialOffer(business.id, tier, days);
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't grant that trial.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(67,53,47,0.4)] p-5" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-sm rounded-spotly border border-border bg-surface p-6">
+        <h3 className="mb-1 text-lg text-warm-brown">Grant a trial to {business.name}</h3>
+        <p className="mb-4 text-xs text-warm-clay">
+          Emails the owner immediately. Grants eligibility only — they still have to click &quot;Start Trial&quot;
+          themselves for the clock to actually start.
+        </p>
+        <label className="mb-4 block">
+          <span className="mb-1 block text-xs font-semibold text-warm-clay">Trial tier</span>
+          <select value={tier} onChange={(e) => setTier(e.target.value as "GROWTH" | "PREMIUM")} className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta">
+            <option value="GROWTH">Featured</option>
+            <option value="PREMIUM">Premium</option>
+          </select>
+        </label>
+        <label className="mb-5 block">
+          <span className="mb-1 block text-xs font-semibold text-warm-clay">Trial length (days)</span>
+          <input type="number" min={1} max={90} value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-full rounded-xl border border-border bg-cream px-3 py-2 text-sm outline-none focus:border-terracotta" />
+        </label>
+        {error && <p className="mb-4 text-sm text-error">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-full border border-border py-2 text-sm font-semibold">Cancel</button>
+          <button onClick={submit} disabled={busy} className="flex-1 rounded-full bg-terracotta py-2 text-sm font-semibold text-white disabled:opacity-60">
+            {busy ? "Granting…" : "Grant trial"}
+          </button>
+        </div>
       </div>
     </div>
   );
