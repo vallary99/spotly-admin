@@ -150,6 +150,7 @@ export interface AdminBusiness {
   isSuspended: boolean;
   suspendedUntil: string | null;
   isHiddenGem: boolean;
+  isBetaPartner: boolean;
   isGrandfathered: boolean;
   discountPercent: number;
   isTrialing: boolean;
@@ -177,6 +178,10 @@ export interface AdminBusinessDetail {
   tier: string;
   subscriptionStatus: string;
   isGrandfathered: boolean;
+  // Named to match what getDetail() actually returns (a raw entity
+  // spread) — unlike the businesses list, which explicitly renames this
+  // to isBetaPartner (see AdminBusinessService.findAll).
+  firstCohortPremiumTrial: boolean;
   discountPercent: number;
   trialOfferTier: string | null;
   trialOfferDays: number | null;
@@ -223,6 +228,7 @@ export interface BusinessFilters {
   listingStatus?: "PENDING" | "ACTIVE" | "INACTIVE" | "DORMANT";
   isSuspended?: boolean;
   isHiddenGem?: boolean;
+  firstCohortPremiumTrial?: boolean;
   registeredAfter?: string;
   registeredBefore?: string;
   minProfileViews?: number;

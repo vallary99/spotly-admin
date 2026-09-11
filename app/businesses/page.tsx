@@ -94,7 +94,7 @@ export default function BusinessesPage() {
   // something precise: "there's an active filter you can't currently
   // see").
   const hasActiveDrawerFilters = Boolean(
-    filters.city || filters.neighborhood || filters.category || filters.isHiddenGem !== undefined || filters.minProfileViews != null,
+    filters.city || filters.neighborhood || filters.category || filters.isHiddenGem !== undefined || filters.firstCohortPremiumTrial !== undefined || filters.minProfileViews != null,
   );
 
   return (
@@ -496,6 +496,16 @@ function FilterDrawer({
             ]}
             onChange={(v) => onChange({ isHiddenGem: v === "" ? undefined : v === "true" })}
           />
+          <LabeledSelect
+            label="Beta Partner"
+            value={filters.firstCohortPremiumTrial === undefined ? "" : String(filters.firstCohortPremiumTrial)}
+            options={[
+              { value: "", label: "Any" },
+              { value: "true", label: "First 100 (beta partner)" },
+              { value: "false", label: "Not in first 100" },
+            ]}
+            onChange={(v) => onChange({ firstCohortPremiumTrial: v === "" ? undefined : v === "true" })}
+          />
           <NumberField label="Min Views" value={filters.minProfileViews} onChange={(v) => onChange({ minProfileViews: v })} />
           <div>
             <span className="mb-1 block text-xs font-semibold text-warm-clay">Sort by</span>
@@ -609,6 +619,7 @@ function BusinessDetailModal({
                 <DetailRow label="Tier" value={tierLabel(detail.tier)} />
                 <DetailRow label="Billing status" value={detail.subscriptionStatus} />
                 {detail.isGrandfathered && <DetailRow label="First-200 cohort" value="Yes" />}
+                {detail.firstCohortPremiumTrial && <DetailRow label="Beta Partner" value="Yes (first 100)" />}
                 {detail.discountPercent > 0 && <DetailRow label="Discount" value={`${detail.discountPercent}%`} />}
                 {detail.isTrialing && <DetailRow label="Trial ends" value={formatDate(detail.trialEndsAt)} />}
                 {!detail.isTrialing && detail.trialOfferTier && (
