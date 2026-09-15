@@ -143,6 +143,9 @@ export interface AdminBusiness {
   city: string;
   neighborhood: string | null;
   tier: string;
+  type: "VENUE" | "EXPERIENCE_HOST" | "MADE_IN_KENYA";
+  approvalStatus: "APPROVED" | "PENDING" | "REJECTED";
+  madeInKenyaCategory: string | null;
   listingStatus: "PENDING" | "ACTIVE" | "INACTIVE" | "DORMANT";
   subscriptionStatus: string;
   profileViews: number;
@@ -196,6 +199,7 @@ export interface AdminBusinessDetail {
   wentLiveAt: string | null;
   profileViews: number;
   savesCount: number;
+  sharesCount: number;
   createdAt: string;
   updatedAt: string;
   owner: {
@@ -226,6 +230,8 @@ export interface BusinessFilters {
   category?: string;
   tier?: string;
   listingStatus?: "PENDING" | "ACTIVE" | "INACTIVE" | "DORMANT";
+  type?: "VENUE" | "EXPERIENCE_HOST" | "MADE_IN_KENYA";
+  approvalStatus?: "APPROVED" | "PENDING" | "REJECTED";
   isSuspended?: boolean;
   isHiddenGem?: boolean;
   firstCohortPremiumTrial?: boolean;
@@ -268,6 +274,7 @@ export interface EmailSendLog {
   subject: string;
   businessId: string | null;
   businessName: string | null;
+  recipientEmail: string | null;
   filters: Record<string, unknown>;
   recipientCount: number;
   businessIds: string[];
@@ -366,6 +373,9 @@ export const api = {
       request(`/admin/businesses/${id}/discount`, { method: "PUT", body: JSON.stringify({ discountPercent }) }),
     grantTrialOffer: (id: string, tier: "GROWTH" | "PREMIUM", days: number) =>
       request(`/admin/businesses/${id}/trial-offer`, { method: "PUT", body: JSON.stringify({ tier, days }) }),
+    approveMadeInKenya: (id: string) => request(`/admin/businesses/${id}/approve-made-in-kenya`, { method: "PUT" }),
+    rejectMadeInKenya: (id: string, reason?: string) =>
+      request(`/admin/businesses/${id}/reject-made-in-kenya`, { method: "PUT", body: JSON.stringify({ reason }) }),
   },
   reviews: {
     delete: (id: string) => request(`/admin/reviews/${id}`, { method: "DELETE" }),
@@ -409,6 +419,10 @@ export const api = {
       request<{ total: number; successTotalAmount: number; results: Transaction[] }>(
         `/admin/transactions${toQueryString(filters as Record<string, unknown>)}`,
       ),
+    recheck: (id: string) =>
+      request<{ resultCode: string; resultDesc: string } | { skipped: string }>(`/admin/transactions/${id}/recheck`, {
+        method: "PUT",
+      }),
   },
   tierConfigs: {
     list: () => request<Record<string, TierLimit>>("/admin/tier-configs"),

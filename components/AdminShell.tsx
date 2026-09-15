@@ -11,7 +11,7 @@ const NAV = [
   { href: "/businesses", label: "Businesses", icon: "bi-shop" },
   { href: "/transactions", label: "Transactions", icon: "bi-credit-card" },
   { href: "/moderation", label: "Moderation Queue", icon: "bi-flag" },
-  { href: "/emails", label: "Email Templates", icon: "bi-envelope" },
+  { href: "/send-history", label: "Send History", icon: "bi-envelope" },
   {
     href: "/configuration",
     label: "Configuration",
@@ -21,6 +21,7 @@ const NAV = [
       { href: "/configuration/categories", label: "Categories" },
       { href: "/configuration/neighborhoods", label: "Neighborhoods" },
       { href: "/configuration/quick-filters", label: "Quick Filters" },
+      { href: "/configuration/emails", label: "Email Templates" },
     ],
   },
 ];

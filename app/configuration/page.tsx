@@ -13,6 +13,7 @@ const TIER_ORDER = ["STARTER", "GROWTH", "PREMIUM"];
 export default function ConfigurationPage() {
   const [tiers, setTiers] = useState<Record<string, TierLimit> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showGoLiveModal, setShowGoLiveModal] = useState(false);
 
   const load = () => {
     setLoadError(null);
@@ -25,12 +26,24 @@ export default function ConfigurationPage() {
 
   return (
     <AdminShell>
-      <div className="mb-5">
-        <h1 className="text-2xl text-warm-brown">Pricing &amp; Tiers</h1>
-        <p className="text-sm text-warm-clay">
-          Package pricing and limits. Changes take effect immediately for every business on that tier — this isn&apos;t
-          a draft/publish flow.
-        </p>
+      <div className="mb-5 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl text-warm-brown">Pricing &amp; Tiers</h1>
+          <p className="text-sm text-warm-clay">
+            Package pricing and limits. Changes take effect immediately for every business on that tier — this isn&apos;t
+            a draft/publish flow.
+          </p>
+        </div>
+        {/* Moved from an always-visible section on this page into a
+            modal (Val, Sep 2026) — a separate, occasional setting
+            didn't need permanent space on a page whose main job is the
+            tier cards below. */}
+        <button
+          onClick={() => setShowGoLiveModal(true)}
+          className="shrink-0 rounded-full border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-warm-brown hover:bg-cream"
+        >
+          <i className="bi bi-bell mr-1.5" /> Go-Live Reminders
+        </button>
       </div>
 
       {loadError && <p className="mb-4 text-sm text-error">{loadError}</p>}
@@ -45,13 +58,24 @@ export default function ConfigurationPage() {
         </div>
       )}
 
-      <div className="mb-5 mt-10">
-        <h2 className="text-xl text-warm-brown">Go-Live Reminders</h2>
-        <p className="text-sm text-warm-clay">
-          How often a business with no photo gets nudged before its listing goes inactive.
-        </p>
-      </div>
-      <GoLiveReminderCard />
+      {showGoLiveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => e.target === e.currentTarget && setShowGoLiveModal(false)}>
+          <div className="w-full max-w-md rounded-spotly bg-surface p-6">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h2 className="text-xl text-warm-brown">Go-Live Reminders</h2>
+                <p className="text-sm text-warm-clay">
+                  How often a business with no photo gets nudged before its listing goes inactive.
+                </p>
+              </div>
+              <button onClick={() => setShowGoLiveModal(false)} className="shrink-0 text-warm-clay" aria-label="Close">
+                <i className="bi bi-x-lg" />
+              </button>
+            </div>
+            <GoLiveReminderCard />
+          </div>
+        </div>
+      )}
     </AdminShell>
   );
 }
@@ -91,7 +115,7 @@ function GoLiveReminderCard() {
   const inactiveAfterDays = form.reminderIntervalDays * form.reminderCount;
 
   return (
-    <div className="max-w-md rounded-spotly border border-border bg-surface p-5">
+    <div>
       <label className="mb-4 block">
         <span className="mb-1 block text-xs font-semibold text-warm-clay">Days between reminders</span>
         <input

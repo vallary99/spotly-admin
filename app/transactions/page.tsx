@@ -97,14 +97,15 @@ export default function TransactionsPage() {
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">M-Pesa Receipt</th>
               <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-warm-clay">Loading…</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-warm-clay">Loading…</td></tr>
             )}
             {!loading && data?.results.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-warm-clay">No transactions match these filters.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-warm-clay">No transactions match these filters.</td></tr>
             )}
             {data?.results.map((t) => (
               <tr key={t.id} className="border-b border-border last:border-0 hover:bg-cream/50">
@@ -116,11 +117,54 @@ export default function TransactionsPage() {
                 <td className={`px-4 py-3 font-semibold ${STATUS_STYLES[t.status] ?? ""}`}>{t.status}</td>
                 <td className="px-4 py-3 text-xs text-warm-clay">{t.mpesaReceiptNumber ?? "—"}</td>
                 <td className="px-4 py-3 text-xs text-warm-clay">{new Date(t.createdAt).toLocaleString()}</td>
+                <td className="px-4 py-3">
+                  {/* PENDING payments already get auto-rechecked every 5
+                      minutes (see PaymentReconciliationService) — this is
+                      for support cases where waiting isn't ideal: a
+                      business owner says they paid and wants to know now,
+                      not in up to 5 minutes. */}
+                  {t.status === "PENDING" && <RecheckButton id={t.id} onDone={load} />}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </AdminShell>
+  );
+}
+
+function RecheckButton({ id, onDone }: { id: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const recheck = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await api.transactions.recheck(id);
+      if ("skipped" in result) {
+        setMessage(result.skipped);
+      } else {
+        onDone();
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Couldn't check that.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        onClick={recheck}
+        disabled={busy}
+        className="rounded-full border border-border px-3 py-1 text-xs font-semibold hover:bg-cream disabled:opacity-50"
+      >
+        {busy ? "Checking…" : "Recheck now"}
+      </button>
+      {message && <p className="mt-1 text-xs text-warm-clay">{message}</p>}
+    </div>
   );
 }

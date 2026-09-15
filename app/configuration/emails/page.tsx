@@ -2,20 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/AdminShell";
-import { api, type EmailTemplate, type EmailSendLog, type BusinessFilters } from "@/lib/api";
+import { api, type EmailTemplate, type BusinessFilters } from "@/lib/api";
 
 type View = "list" | "edit" | "send" | "outreach";
 
 export default function EmailsPage() {
   const [view, setView] = useState<View>("list");
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [history, setHistory] = useState<EmailSendLog[]>([]);
   const [editing, setEditing] = useState<EmailTemplate | null>(null);
   const [sending, setSending] = useState<EmailTemplate | null>(null);
 
   const load = () => {
     api.email.listTemplates().then(setTemplates).catch(() => {});
-    api.email.sendHistory().then(setHistory).catch(() => {});
   };
   useEffect(load, []);
 
@@ -119,41 +117,6 @@ export default function EmailsPage() {
         })}
       </div>
 
-      <h2 className="mb-3 text-lg text-warm-brown">Send History</h2>
-      <div className="overflow-x-auto rounded-spotly border border-border bg-surface">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-warm-clay">
-              <th className="px-4 py-3">Template</th>
-              <th className="px-4 py-3">Subject (rendered)</th>
-              <th className="px-4 py-3">Business</th>
-              <th className="px-4 py-3">Sent By</th>
-              <th className="px-4 py-3">Sent</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-warm-clay">No sends yet.</td></tr>
-            )}
-            {history.map((h) => (
-              <tr key={h.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-3">{h.templateName}</td>
-                <td className="px-4 py-3 text-warm-clay">{h.subject}</td>
-                {/* businessName is only null on the couple of rows
-                    logged before this column existed — those still show
-                    their original aggregate count instead, rather than
-                    a blank cell. */}
-                <td className="px-4 py-3">{h.businessName ?? `${h.recipientCount} recipients`}</td>
-                {/* null = an automatic system send (signup, first-photo
-                    approval) rather than an admin clicking "Send" —
-                    see EmailService.logAutomaticSend. */}
-                <td className="px-4 py-3">{h.sentByAdminId ? "Admin" : "System"}</td>
-                <td className="px-4 py-3 text-xs text-warm-clay">{new Date(h.createdAt).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </AdminShell>
   );
 }

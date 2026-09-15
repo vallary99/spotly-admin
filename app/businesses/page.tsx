@@ -81,6 +81,8 @@ export default function BusinessesPage() {
       filters.neighborhood ||
       filters.category ||
       filters.tier ||
+      filters.type ||
+      filters.approvalStatus ||
       filters.listingStatus ||
       filters.isSuspended !== undefined ||
       filters.isHiddenGem !== undefined ||
@@ -128,7 +130,7 @@ export default function BusinessesPage() {
           directly gates the reward-program actions on this same page
           (discount needs a paid tier, trial needs Starter) — filtering
           by it first is a natural way into using those. */}
-      <div className="mb-3 grid grid-cols-1 gap-3 rounded-spotly border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-3 grid grid-cols-1 gap-3 rounded-spotly border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-7">
         <label className="block">
           <span className="mb-1 block text-xs font-semibold text-warm-clay">Search</span>
           <div className="relative">
@@ -146,6 +148,28 @@ export default function BusinessesPage() {
           value={filters.listingStatus ?? ""}
           options={LISTING_STATUS_OPTIONS}
           onChange={(v) => setFilter({ listingStatus: (v || undefined) as BusinessFilters["listingStatus"] })}
+        />
+        <LabeledSelect
+          label="Business type"
+          value={filters.type ?? ""}
+          options={[
+            { value: "", label: "Any" },
+            { value: "VENUE", label: "Venue" },
+            { value: "EXPERIENCE_HOST", label: "Experience Host" },
+            { value: "MADE_IN_KENYA", label: "Made in Kenya" },
+          ]}
+          onChange={(v) => setFilter({ type: (v || undefined) as BusinessFilters["type"] })}
+        />
+        <LabeledSelect
+          label="Approval status"
+          value={filters.approvalStatus ?? ""}
+          options={[
+            { value: "", label: "Any" },
+            { value: "PENDING", label: "Pending (Made in Kenya)" },
+            { value: "APPROVED", label: "Approved" },
+            { value: "REJECTED", label: "Rejected" },
+          ]}
+          onChange={(v) => setFilter({ approvalStatus: (v || undefined) as BusinessFilters["approvalStatus"] })}
         />
         <LabeledSelect
           label="Tier"
@@ -202,23 +226,25 @@ export default function BusinessesPage() {
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-warm-clay">
               <th className="px-4 py-3">Business</th>
+              <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Neighbourhood</th>
               <th className="px-4 py-3">Views</th>
               <th className="px-4 py-3">Saves</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Listing</th>
+              <th className="px-4 py-3">Approval</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-warm-clay">Loading…</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-warm-clay">Loading…</td>
               </tr>
             )}
             {!loading && data?.results.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-warm-clay">No businesses match these filters.</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-warm-clay">No businesses match these filters.</td>
               </tr>
             )}
             {/* Row itself opens the detail modal — everything that used
@@ -235,6 +261,11 @@ export default function BusinessesPage() {
                 <td className="px-4 py-3">
                   <div className="font-medium text-text">{b.name}</div>
                   <div className="text-xs text-warm-clay">{b.category}</div>
+                </td>
+                <td className="px-4 py-3 text-xs text-warm-clay">
+                  {b.type === "VENUE" && "Venue"}
+                  {b.type === "EXPERIENCE_HOST" && "Experience Host"}
+                  {b.type === "MADE_IN_KENYA" && "Made in Kenya"}
                 </td>
                 <td className="px-4 py-3">{b.neighborhood ?? "—"}</td>
                 <td className="px-4 py-3">{b.profileViews}</td>
@@ -253,8 +284,35 @@ export default function BusinessesPage() {
                   {b.listingStatus === "DORMANT" && <span className="text-xs font-semibold text-olive">Dormant</span>}
                   {b.listingStatus === "INACTIVE" && <span className="text-xs font-semibold text-error">Inactive</span>}
                 </td>
+                <td className="px-4 py-3">
+                  {/* Only meaningful for Made in Kenya — Venue/Experience
+                      Host always default to APPROVED and never go
+                      through this flow, so showing that as if it were a
+                      real status here would just be noise (Val, Sep
+                      2026). */}
+                  {b.type === "MADE_IN_KENYA" ? (
+                    <>
+                      {b.approvalStatus === "APPROVED" && <span className="text-xs font-semibold text-success">Approved</span>}
+                      {b.approvalStatus === "PENDING" && <span className="text-xs font-semibold text-warm-clay">Pending</span>}
+                      {b.approvalStatus === "REJECTED" && <span className="text-xs font-semibold text-error">Rejected</span>}
+                    </>
+                  ) : (
+                    <span className="text-xs text-warm-clay">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-1.5">
+                    {/* A Made in Kenya business awaiting review shows
+                        ONLY the approval actions — Deactivate, Hidden
+                        Gem, and the reward-program buttons don't mean
+                        anything yet for a business that isn't even
+                        live (Val, Sep 2026: Business Approvals). Once
+                        approved (or rejected), it falls through to the
+                        normal action set every other business gets. */}
+                    {b.type === "MADE_IN_KENYA" && b.approvalStatus === "PENDING" ? (
+                      <ApprovalButtons business={b} onDone={load} />
+                    ) : (
+                      <>
                     {b.isSuspended ? (
                       <button
                         onClick={() => api.businesses.unsuspend(b.id).then(load).catch(() => {})}
@@ -302,6 +360,8 @@ export default function BusinessesPage() {
                       >
                         Trial
                       </button>
+                    )}
+                      </>
                     )}
                   </div>
                 </td>
@@ -434,6 +494,76 @@ function LabeledSelect({
 // the ones judged most reached-for; this is genuinely everything else).
 // Slides in from the right rather than replacing the page content, so
 // the table stays visible underneath while adjusting these.
+// The only action shown for a Made in Kenya business still awaiting
+// review (Val, Sep 2026: Business Approvals) — everything else about
+// managing a business (suspend, hidden gem, rewards) doesn't apply
+// until it's actually approved. Reject asks for an optional reason
+// inline rather than opening a whole modal, since it's a quick,
+// occasional action.
+function ApprovalButtons({ business, onDone }: { business: AdminBusiness; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const approve = async () => {
+    setBusy(true);
+    try {
+      await api.businesses.approveMadeInKenya(business.id);
+      onDone();
+    } catch {
+      // leave the row as-is on failure, same posture as the rest of this app
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reject = async () => {
+    setBusy(true);
+    try {
+      await api.businesses.rejectMadeInKenya(business.id, reason || undefined);
+      onDone();
+    } catch {
+      // same posture as above
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (rejecting) {
+    return (
+      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Reason (optional)"
+          className="w-36 rounded-full border border-border bg-cream px-2.5 py-1 text-xs outline-none focus:border-terracotta"
+        />
+        <button onClick={reject} disabled={busy} className="rounded-full bg-error px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">
+          Confirm
+        </button>
+        <button onClick={() => setRejecting(false)} className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold hover:bg-cream">
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <button onClick={approve} disabled={busy} className="rounded-full bg-terracotta px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">
+        Approve
+      </button>
+      <button
+        onClick={() => setRejecting(true)}
+        disabled={busy}
+        className="rounded-full border border-error px-2.5 py-1 text-xs font-semibold text-error hover:bg-[rgba(214,90,74,0.08)] disabled:opacity-50"
+      >
+        Reject
+      </button>
+    </>
+  );
+}
+
 function FilterDrawer({
   filters,
   categories,
@@ -641,8 +771,9 @@ function BusinessDetailModal({
 
               <div className="mb-4 rounded-2xl border border-border p-3">
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-clay">Usage</p>
-                <DetailRow label="Profile views (30d)" value={detail.profileViews} />
-                <DetailRow label="Saves (30d)" value={detail.savesCount} />
+                <DetailRow label="Profile views" value={detail.profileViews} />
+                <DetailRow label="Saves" value={detail.savesCount} />
+                <DetailRow label="Shares" value={detail.sharesCount} />
               </div>
 
               {detail.owner && (
